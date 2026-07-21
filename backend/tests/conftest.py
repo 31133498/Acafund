@@ -1,17 +1,16 @@
 import os
 
-# Must be set before any app import so pydantic-settings picks them up.
-os.environ.setdefault("SECRET_KEY", "test-secret-key-for-pytest-at-least-32-chars!!")
-os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
+# Force-set before any app import — overrides the container's PostgreSQL DATABASE_URL
+# so all tests run against an isolated SQLite in-memory database.
+os.environ["SECRET_KEY"] = "test-secret-key-for-pytest-at-least-32-chars!!"
+os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
 import pytest
 from fastapi.testclient import TestClient
 
-# Importing app triggers model registration on Base.
-import app.models.community  # noqa: F401
-import app.models.user  # noqa: F401
-from app.database import Base, engine
-from app.main import app
+# Importing app.main triggers model registration on Base (main.py imports all models).
+from app.database import Base, SessionLocal, engine
+from app.main import app  # noqa: F401 — side-effect: registers all models
 
 
 @pytest.fixture(scope="function")
@@ -20,3 +19,13 @@ def client():
     with TestClient(app) as c:
         yield c
     Base.metadata.drop_all(bind=engine)
+
+
+@pytest.fixture(scope="function")
+def db_session():
+    """Direct DB session — shares the same SQLite StaticPool connection as the client."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
