@@ -14,7 +14,7 @@ from app.core.security import get_current_user
 from app.database import get_db
 from app.models.collection import Collection, CollectionMember
 from app.models.community import CommunityMember
-from app.models.enums import MemberPaymentStatus, MemberRole, PaymentStatus
+from app.models.enums import CollectionStatus, MemberPaymentStatus, MemberRole, PaymentStatus
 from app.models.payment import Payment
 from app.services.ledger import record_credit
 from app.services.monnify import MonnifyError, monnify_service
@@ -103,6 +103,8 @@ async def initiate_payment(
     col = db.query(Collection).filter(Collection.id == collection_id).first()
     if not col:
         raise HTTPException(status_code=404, detail="Collection not found")
+    if col.status != CollectionStatus.ACTIVE:
+        raise HTTPException(status_code=400, detail="Collection is not active")
 
     if not db.query(CommunityMember).filter(
         CommunityMember.community_id == col.community_id,
