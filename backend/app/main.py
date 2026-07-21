@@ -6,8 +6,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import Base, engine
 
-import app.models.user  # noqa: F401 — registers User with Base
-import app.models.community  # noqa: F401 — registers Community/CommunityMember with Base
+import app.models.user  # noqa: F401
+import app.models.community  # noqa: F401
+import app.models.collection  # noqa: F401
+import app.models.payment  # noqa: F401
+import app.models.ledger  # noqa: F401
+import app.models.expense  # noqa: F401
 
 
 @asynccontextmanager
@@ -28,9 +32,19 @@ app.add_middleware(
 
 from app.routers.auth import router as auth_router
 from app.routers.communities import router as communities_router
+from app.routers.collections import router as collections_router
+from app.routers.payments import router as payments_router
+from app.routers.expenses import router as expenses_router
+from app.routers.reports import router as reports_router
+from app.routers.assistant import router as assistant_router
 
 app.include_router(auth_router)
 app.include_router(communities_router)
+app.include_router(collections_router)
+app.include_router(payments_router)
+app.include_router(expenses_router)
+app.include_router(reports_router)
+app.include_router(assistant_router)
 
 
 @app.get("/health")
