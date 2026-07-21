@@ -2,7 +2,7 @@ import type {
   TokenResponse, User, Community, CommunityMember, Collection,
   CollectionDetail, CollectionDashboard, CollectionMemberEntry,
   CommunityDashboard, Expense, LedgerResponse, TransparencyReport,
-  MemberRole,
+  MemberRole, ActiveCollectionSummary,
 } from './types'
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
@@ -89,9 +89,9 @@ const OFFLINE_COLLECTION = (overrides: Partial<Collection> = {}): Collection => 
 
 const OFFLINE_EXPENSE = (overrides: Partial<Expense> = {}): Expense => ({
   id: 1, community_id: 1, title: 'Expense', amount: 0, category: 'Other',
-  status: 'pending', receipt_url: null, created_by: 1,
-  linked_collection_id: null, created_at: new Date().toISOString(), notes: null,
-  ...overrides,
+  status: 'pending', receipt_url: null, requested_by: 1, approved_by: null,
+  collection_id: null, created_at: new Date().toISOString(), decision_note: null,
+  decided_at: null, ...overrides,
 })
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -182,7 +182,7 @@ export async function getCommunityDashboard(id: number): Promise<CommunityDashbo
     return await req<CommunityDashboard>(`/communities/${id}/dashboard`)
   } catch (e) {
     if (!isOffline(e)) throw e
-    return { treasury_balance: 0, active_collections: 0, pending_expenses_count: 0, recent_activity: [] }
+    return { treasury_balance: 0, active_collections: [] as ActiveCollectionSummary[], pending_expenses_count: 0, recent_ledger: [] }
   }
 }
 
@@ -279,12 +279,15 @@ export async function closeCollection(id: number): Promise<Collection> {
   }
 }
 
-export async function initiatePayment(collectionId: number): Promise<{ checkout_url: string }> {
+export async function initiatePayment(collectionId: number): Promise<{ checkout_url: string; payment_reference: string }> {
   try {
-    return await req(`/collections/${collectionId}/pay`, { method: 'POST' })
+    const redirect_url = `${window.location.origin}/payment-return?collection_id=${collectionId}`
+    return await req(`/collections/${collectionId}/pay`, {
+      method: 'POST', body: JSON.stringify({ redirect_url }),
+    })
   } catch (e) {
     if (!isOffline(e)) throw e
-    return { checkout_url: `${window.location.origin}/payment-return?collection_id=${collectionId}` }
+    return { checkout_url: `${window.location.origin}/payment-return?collection_id=${collectionId}`, payment_reference: '' }
   }
 }
 
@@ -302,7 +305,7 @@ export async function getTransparencyReport(collectionId: number): Promise<Trans
     return await req<TransparencyReport>(`/collections/${collectionId}/transparency`, {}, true)
   } catch (e) {
     if (!isOffline(e)) throw e
-    return { title: 'Collection', collection_purpose: '', target_amount: 0, collected_amount: 0, paid_count: 0, pending_count: 0, budget_allocation: null, linked_expenses: [] }
+    return { id: collectionId, title: 'Collection', description: null, target_amount: null, amount_collected: 0, paid_count: 0, pending_count: 0, waived_count: 0, budget_allocation: null, expenses: [] }
   }
 }
 
@@ -319,7 +322,7 @@ export async function getExpenses(communityId: number): Promise<Expense[]> {
 
 export async function createExpense(
   communityId: number,
-  data: { title: string; amount: number; category: string; receipt_url?: string; linked_collection_id?: number },
+  data: { title: string; amount: number; category: string; receipt_url?: string; collection_id?: number },
 ): Promise<Expense> {
   try {
     return await req<Expense>(`/communities/${communityId}/expenses`, {
@@ -331,7 +334,7 @@ export async function createExpense(
       id: Date.now(), community_id: communityId,
       title: data.title, amount: data.amount, category: data.category,
       receipt_url: data.receipt_url ?? null,
-      linked_collection_id: data.linked_collection_id ?? null,
+      collection_id: data.collection_id ?? null,
     })
   }
 }
@@ -339,22 +342,22 @@ export async function createExpense(
 export async function approveExpense(expenseId: number, note?: string): Promise<Expense> {
   try {
     return await req<Expense>(`/expenses/${expenseId}/approve`, {
-      method: 'POST', body: JSON.stringify({ note }),
+      method: 'POST', body: JSON.stringify({ decision_note: note ?? null }),
     })
   } catch (e) {
     if (!isOffline(e)) throw e
-    return OFFLINE_EXPENSE({ id: expenseId, status: 'approved', notes: note ?? null })
+    return OFFLINE_EXPENSE({ id: expenseId, status: 'approved', decision_note: note ?? null })
   }
 }
 
 export async function rejectExpense(expenseId: number, note: string): Promise<Expense> {
   try {
     return await req<Expense>(`/expenses/${expenseId}/reject`, {
-      method: 'POST', body: JSON.stringify({ note }),
+      method: 'POST', body: JSON.stringify({ decision_note: note }),
     })
   } catch (e) {
     if (!isOffline(e)) throw e
-    return OFFLINE_EXPENSE({ id: expenseId, status: 'rejected', notes: note })
+    return OFFLINE_EXPENSE({ id: expenseId, status: 'rejected', decision_note: note })
   }
 }
 
@@ -365,7 +368,7 @@ export async function getLedger(communityId: number): Promise<LedgerResponse> {
     return await req<LedgerResponse>(`/communities/${communityId}/ledger`)
   } catch (e) {
     if (!isOffline(e)) throw e
-    return { entries: [], total_balance: 0 }
+    return { entries: [], balance: 0, total: 0 }
   }
 }
 

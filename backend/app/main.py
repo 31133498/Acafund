@@ -37,8 +37,10 @@ from app.routers.payments import router as payments_router
 from app.routers.expenses import router as expenses_router
 from app.routers.reports import router as reports_router
 from app.routers.assistant import router as assistant_router
+from app.routers.users import router as users_router
 
 app.include_router(auth_router)
+app.include_router(users_router)
 app.include_router(communities_router)
 app.include_router(collections_router)
 app.include_router(payments_router)

@@ -140,3 +140,25 @@ def test_change_role_on_nonexistent_member_returns_404(client):
         headers=admin["headers"],
     )
     assert resp.status_code == 404
+
+
+def test_get_my_communities(client):
+    user = _make_user(client, "mycomms@c.com")
+    comm1 = _make_community(client, user["headers"], "Comm Alpha")
+
+    other = _make_user(client, "other@c.com")
+    comm2 = _make_community(client, other["headers"], "Comm Beta")
+    # join comm2 as a member
+    client.post("/communities/join", json={"invite_code": comm2["invite_code"]}, headers=user["headers"])
+
+    resp = client.get("/users/me/communities", headers=user["headers"])
+    assert resp.status_code == 200
+    data = resp.json()
+    ids = [c["id"] for c in data]
+    assert comm1["id"] in ids
+    assert comm2["id"] in ids
+    # community the user has nothing to do with should not appear
+    stranger = _make_user(client, "stranger@c.com")
+    stranger_comm = _make_community(client, stranger["headers"], "Stranger Comm")
+    resp2 = client.get("/users/me/communities", headers=user["headers"])
+    assert stranger_comm["id"] not in [c["id"] for c in resp2.json()]

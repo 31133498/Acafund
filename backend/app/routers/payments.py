@@ -2,7 +2,7 @@ import hashlib
 import hmac
 import json
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -31,6 +31,16 @@ class PayInitIn(BaseModel):
 class PayInitOut(BaseModel):
     checkout_url: str
     payment_reference: str
+
+
+class CollectionMemberOut(BaseModel):
+    id: int
+    collection_id: int
+    user_id: int
+    amount_due: float
+    status: MemberPaymentStatus
+    paid_at: Optional[datetime] = None
+    model_config = {"from_attributes": True}
 
 
 class PaymentOut(BaseModel):
@@ -234,8 +244,8 @@ async def sync_payment(
     return {"status": "not_paid", "monnify_status": payment_status_str}
 
 
-@router.get("/collections/{collection_id}/payments/me", response_model=List[PaymentOut])
-def get_my_payments(
+@router.get("/collections/{collection_id}/payments/me", response_model=CollectionMemberOut)
+def get_my_member_status(
     collection_id: int,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -250,12 +260,14 @@ def get_my_payments(
     ).first():
         raise HTTPException(status_code=403, detail="Not a community member")
 
-    return (
-        db.query(Payment)
+    member = (
+        db.query(CollectionMember)
         .filter(
-            Payment.collection_id == collection_id,
-            Payment.user_id == current_user.id,
+            CollectionMember.collection_id == collection_id,
+            CollectionMember.user_id == current_user.id,
         )
-        .order_by(Payment.created_at.desc())
-        .all()
+        .first()
     )
+    if not member:
+        raise HTTPException(status_code=404, detail="Not enrolled in this collection")
+    return member

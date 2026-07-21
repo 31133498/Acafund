@@ -36,8 +36,8 @@ export default function TransparencyReport() {
     </div>
   )
 
-  const pct = report.target_amount > 0
-    ? (report.collected_amount / report.target_amount) * 100
+  const pct = (report.target_amount ?? 0) > 0
+    ? (report.amount_collected / (report.target_amount as number)) * 100
     : 0
 
   return (
@@ -58,7 +58,7 @@ export default function TransparencyReport() {
             Community Financial Report
           </p>
           <h1 className="text-[32px] font-bold tracking-tight">{report.title ?? 'Collection Report'}</h1>
-          <p className="text-[15px] text-on-surface-variant mt-2">{report.collection_purpose}</p>
+          {report.description && <p className="text-[15px] text-on-surface-variant mt-2">{report.description}</p>}
         </div>
 
         {/* Progress */}
@@ -73,11 +73,11 @@ export default function TransparencyReport() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="text-[12px] font-bold uppercase tracking-widest text-on-primary-container/70">Collected</p>
-              <p className="text-[24px] font-bold">{fmt(report.collected_amount)}</p>
+              <p className="text-[24px] font-bold">{fmt(report.amount_collected)}</p>
             </div>
             <div>
               <p className="text-[12px] font-bold uppercase tracking-widest text-on-primary-container/70">Target</p>
-              <p className="text-[24px] font-bold">{fmt(report.target_amount)}</p>
+              <p className="text-[24px] font-bold">{fmt(report.target_amount ?? 0)}</p>
             </div>
           </div>
         </div>
@@ -124,16 +124,16 @@ export default function TransparencyReport() {
         )}
 
         {/* Linked expenses */}
-        {report.linked_expenses && report.linked_expenses.length > 0 && (
+        {report.expenses && report.expenses.length > 0 && (
           <div className="border-2 border-black bg-white neo-shadow">
             <div className="border-b-2 border-black px-5 py-3">
               <h2 className="text-[14px] font-bold uppercase tracking-[0.06em]">Recorded Expenses</h2>
             </div>
             <div className="divide-y-2 divide-black">
-              {report.linked_expenses.map((exp, i) => (
+              {report.expenses.map((exp, i) => (
                 <div key={i} className="px-5 py-3 flex justify-between items-center">
                   <div>
-                    <p className="text-[14px] font-bold">{exp.description}</p>
+                    <p className="text-[14px] font-bold">{exp.title}</p>
                     <p className="text-[12px] text-on-surface-variant">{exp.category}</p>
                   </div>
                   <p className="text-[15px] font-bold">{fmt(exp.amount)}</p>

@@ -116,7 +116,7 @@ export default function ExpenseApproval() {
 
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">Requested by</p>
-          <p className="text-[14px]">User #{expense.created_by}</p>
+          <p className="text-[14px]">User #{expense.requested_by}</p>
         </div>
 
         <div>
@@ -135,10 +135,10 @@ export default function ExpenseApproval() {
           </a>
         )}
 
-        {expense.notes && (
+        {expense.decision_note && (
           <div className="border-2 border-black bg-surface-container p-3">
             <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant mb-1">Notes</p>
-            <p className="text-[14px]">{expense.notes}</p>
+            <p className="text-[14px]">{expense.decision_note}</p>
           </div>
         )}
       </div>
