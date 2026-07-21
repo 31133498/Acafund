@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   LayoutDashboard,
   Wallet,
@@ -57,14 +57,14 @@ type TabId = 'dashboard' | 'collections' | 'audit' | 'members'
 export default function DashboardPreview() {
   const [active, setActive] = useState<TabId>('dashboard')
   const [feedItems, setFeedItems] = useState(FEED.slice(0, 3))
+  const feedIdxRef = useRef(3)
 
   useEffect(() => {
     if (active !== 'dashboard') return
     const interval = setInterval(() => {
-      setFeedItems((prev) => {
-        const nextIdx = prev.length % FEED.length
-        return [FEED[nextIdx], ...prev.slice(0, 2)]
-      })
+      const idx = feedIdxRef.current % FEED.length
+      feedIdxRef.current += 1
+      setFeedItems((prev) => [FEED[idx], ...prev.slice(0, 2)])
     }, 3000)
     return () => clearInterval(interval)
   }, [active])
