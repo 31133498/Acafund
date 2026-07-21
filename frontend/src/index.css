@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-family: 'Space Grotesk', sans-serif;
+    @apply bg-surface text-on-surface;
+  }
+
+}
+
+@layer utilities {
+  .neo-shadow {
+    box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 1);
+  }
+  .neo-shadow-lg {
+    box-shadow: 8px 8px 0px 0px rgba(0, 0, 0, 1);
+  }
+  .neo-shadow-sm {
+    box-shadow: 2px 2px 0px 0px rgba(0, 0, 0, 1);
+  }
+  .neo-btn {
+    @apply transition-all duration-150;
+  }
+  .neo-btn:hover {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0px 0px rgba(0, 0, 0, 1);
+  }
+  .neo-btn:active {
+    transform: translate(4px, 4px);
+    box-shadow: none;
+  }
+  .neo-btn-lg {
+    @apply transition-all duration-150;
+  }
+  .neo-btn-lg:hover {
+    transform: translate(4px, 4px);
+    box-shadow: none;
+  }
+}

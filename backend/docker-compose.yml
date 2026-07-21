@@ -1,0 +1,30 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: acafund
+      POSTGRES_USER: acafund
+      POSTGRES_PASSWORD: acafund
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U acafund"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    ports:
+      - "8080:8000"
+    volumes:
+      - .:/app
+
+volumes:
+  postgres_data:

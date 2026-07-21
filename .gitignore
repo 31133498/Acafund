@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.pytest_cache/
+
+# Environment — never commit secrets
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# DB
+*.db
+*.sqlite3
+
+# OS
+.DS_Store
+Thumbs.db
