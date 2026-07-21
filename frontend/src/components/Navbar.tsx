@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Menu, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import Logo from './Logo'
 
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -13,11 +14,8 @@ export default function Navbar() {
   return (
     <nav className="sticky top-0 z-50 flex justify-between items-center px-4 md:px-12 py-4 bg-surface border-b-4 border-black">
       <div className="flex items-center gap-8">
-        <button
-          onClick={() => navigate('/')}
-          className="text-2xl font-bold tracking-tight text-on-surface hover:text-primary transition-colors"
-        >
-          AcaFund
+        <button onClick={() => navigate('/')} className="hover:opacity-80 transition-opacity">
+          <Logo size="md" />
         </button>
         <div className="hidden md:flex gap-6">
           {NAV_LINKS.map((item) => (

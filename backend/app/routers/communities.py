@@ -10,7 +10,7 @@ from app.core.security import get_current_user
 from app.database import get_db
 from app.models.community import Community, CommunityMember
 from app.models.enums import MemberRole
-from app.models.user import User
+from app.models.user import User  # noqa: F401 (imported for the join)
 
 router = APIRouter(prefix="/communities", tags=["communities"])
 
@@ -44,7 +44,9 @@ class MemberOut(BaseModel):
     community_id: int
     user_id: int
     role: MemberRole
-    model_config = {"from_attributes": True}
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    model_config = {"from_attributes": False}
 
 
 class JoinOut(BaseModel):
@@ -118,7 +120,23 @@ def list_members(
     _: CommunityMember = Depends(require_community_role(ALL_ROLES)),
     db: Session = Depends(get_db),
 ):
-    return db.query(CommunityMember).filter(CommunityMember.community_id == community_id).all()
+    rows = (
+        db.query(CommunityMember, User.full_name, User.email)
+        .join(User, CommunityMember.user_id == User.id)
+        .filter(CommunityMember.community_id == community_id)
+        .all()
+    )
+    return [
+        MemberOut(
+            id=m.id,
+            community_id=m.community_id,
+            user_id=m.user_id,
+            role=m.role,
+            full_name=full_name,
+            email=email,
+        )
+        for m, full_name, email in rows
+    ]
 
 
 @router.patch("/{community_id}/members/{user_id}/role", response_model=MemberOut)
@@ -138,4 +156,12 @@ def change_member_role(
     membership.role = body.new_role
     db.commit()
     db.refresh(membership)
-    return membership
+    user = db.query(User).filter(User.id == membership.user_id).first()
+    return MemberOut(
+        id=membership.id,
+        community_id=membership.community_id,
+        user_id=membership.user_id,
+        role=membership.role,
+        full_name=user.full_name if user else None,
+        email=user.email if user else None,
+    )

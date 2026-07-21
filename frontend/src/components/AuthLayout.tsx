@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import Logo from './Logo'
 
 export default function AuthLayout({ children, title, subtitle }: {
   children: ReactNode
@@ -8,8 +9,8 @@ export default function AuthLayout({ children, title, subtitle }: {
 }) {
   return (
     <div className="min-h-screen bg-surface flex flex-col items-center justify-center px-4 py-12">
-      <Link to="/" className="mb-8 text-[24px] font-bold tracking-tight hover:text-primary transition-colors">
-        AcaFund
+      <Link to="/" className="mb-8 hover:opacity-80 transition-opacity">
+        <Logo size="lg" />
       </Link>
       <div className="w-full max-w-md border-4 border-black neo-shadow-lg bg-white p-8">
         <div className="mb-8">

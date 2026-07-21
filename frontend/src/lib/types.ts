@@ -28,6 +28,8 @@ export interface CommunityMember {
   community_id: number
   user_id: number
   role: MemberRole
+  full_name?: string | null
+  email?: string | null
 }
 
 export interface Collection {

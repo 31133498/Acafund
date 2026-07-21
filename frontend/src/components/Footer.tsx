@@ -1,4 +1,5 @@
 import { AtSign, Network, ExternalLink } from 'lucide-react'
+import Logo from './Logo'
 
 const SOCIAL = [
   { icon: AtSign, label: 'Email' },
@@ -11,9 +12,9 @@ export default function Footer() {
     <footer className="w-full py-12 px-4 md:px-12 bg-surface-container-highest border-t-4 border-black">
       <div className="flex flex-col md:flex-row justify-between items-center gap-8">
         <div className="flex flex-col items-center md:items-start gap-3">
-          <span className="text-[24px] font-bold">AcaFund</span>
+          <Logo size="md" />
           <p className="text-[14px] text-on-surface-variant text-center md:text-left max-w-xs leading-relaxed">
-            © 2025 AcaFund. Empowering African Students through radical financial transparency.
+            © 2026 AcaFund. Empowering African student communities through radical financial transparency.
           </p>
         </div>
 
