@@ -1,9 +1,11 @@
 import { useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { PlayCircle } from 'lucide-react'
 import DashboardPreview from './DashboardPreview'
 
 export default function Hero() {
   const sectionRef = useRef<HTMLElement>(null)
+  const navigate = useNavigate()
 
   useEffect(() => {
     const el = sectionRef.current
@@ -20,7 +22,6 @@ export default function Hero() {
       ref={sectionRef}
       className="relative px-4 md:px-12 py-16 md:py-24 flex flex-col items-center text-center bg-white overflow-hidden"
     >
-      {/* Decorative bg shapes */}
       <div className="absolute inset-0 opacity-10 pointer-events-none select-none" aria-hidden>
         <div className="absolute top-10 left-10 w-32 h-32 bg-secondary border-4 border-black rotate-12" />
         <div className="absolute bottom-20 right-10 w-48 h-48 bg-tertiary-fixed-dim border-4 border-black -rotate-6" />
@@ -46,13 +47,19 @@ export default function Hero() {
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <button className="bg-primary-container text-on-primary-container border-4 border-black neo-shadow-lg neo-btn-lg px-8 py-4 text-[14px] font-bold tracking-[0.05em] uppercase text-lg">
+          <button
+            onClick={() => navigate('/register')}
+            className="bg-primary-container text-on-primary-container border-4 border-black neo-shadow-lg neo-btn-lg px-8 py-4 text-[14px] font-bold tracking-[0.05em] uppercase text-lg"
+          >
             Get Started for Free
           </button>
-          <button className="bg-white text-black border-4 border-black neo-shadow-lg neo-btn-lg px-8 py-4 text-[14px] font-bold tracking-[0.05em] uppercase text-lg flex items-center justify-center gap-2">
+          <a
+            href="#features"
+            className="bg-white text-black border-4 border-black neo-shadow-lg neo-btn-lg px-8 py-4 text-[14px] font-bold tracking-[0.05em] uppercase text-lg flex items-center justify-center gap-2"
+          >
             <PlayCircle size={18} />
-            Watch Demo
-          </button>
+            See How It Works
+          </a>
         </div>
 
         <p className="mt-6 text-[12px] text-on-surface-variant font-bold tracking-widest uppercase">
