@@ -67,51 +67,80 @@ export interface CollectionDashboard {
   percent_target_reached: number
 }
 
+export interface ActiveCollectionSummary {
+  id: number
+  title: string
+  target_amount: number | null
+  amount_collected: number
+  paid_count: number
+  pending_count: number
+}
+
+export interface LedgerEntryOut {
+  id: number
+  type: LedgerEntryType
+  amount: number
+  reference_type: string
+  reference_id: number
+  description: string | null
+  created_at: string
+}
+
 export interface CommunityDashboard {
   treasury_balance: number
-  active_collections: number
+  active_collections: ActiveCollectionSummary[]
   pending_expenses_count: number
-  recent_activity: { description: string; created_at: string }[]
+  recent_ledger: LedgerEntryOut[]
 }
 
 export interface Expense {
   id: number
   community_id: number
+  collection_id: number | null
   title: string
   amount: number
   category: string
   status: ExpenseStatus
   receipt_url: string | null
-  created_by: number
-  requester_name?: string
-  linked_collection_id: number | null
+  requested_by: number
+  approved_by: number | null
+  decision_note: string | null
   created_at: string
-  notes: string | null
+  decided_at: string | null
 }
 
 export interface LedgerEntry {
   id: number
   type: LedgerEntryType
   amount: number
-  balance: number
-  description: string
+  description: string | null
   created_at: string
 }
 
 export interface LedgerResponse {
   entries: LedgerEntry[]
-  total_balance: number
+  balance: number
+  total: number
+}
+
+export interface TransparencyExpense {
+  title: string
+  amount: number
+  category: string
+  status: ExpenseStatus
 }
 
 export interface TransparencyReport {
+  id: number
   title: string
-  collection_purpose: string
-  target_amount: number
-  collected_amount: number
+  description: string | null
+  target_amount: number | null
+  amount_collected: number
   paid_count: number
   pending_count: number
+  waived_count: number
   budget_allocation: Record<string, number> | null
-  linked_expenses: { category: string; amount: number; description: string }[]
+  expenses: TransparencyExpense[]
 }
 
 export interface ApiError {

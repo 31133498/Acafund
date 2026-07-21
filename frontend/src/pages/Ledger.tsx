@@ -11,11 +11,26 @@ import type { LedgerEntry } from '../lib/types'
 
 function fmt(n: number) { return `₦${Math.abs(n).toLocaleString('en-NG')}` }
 
+interface EntryWithBalance extends LedgerEntry {
+  runningBalance: number
+}
+
+function computeRunningBalances(entries: LedgerEntry[]): EntryWithBalance[] {
+  // entries are newest-first; compute running balance from oldest
+  const reversed = [...entries].reverse()
+  let balance = 0
+  const withBalance = reversed.map((e) => {
+    balance += e.type === 'credit' ? e.amount : -e.amount
+    return { ...e, runningBalance: balance }
+  })
+  return withBalance.reverse()
+}
+
 export default function Ledger() {
   const { id } = useParams<{ id: string }>()
   const communityId = Number(id)
 
-  const [entries, setEntries] = useState<LedgerEntry[]>([])
+  const [entries, setEntries] = useState<EntryWithBalance[]>([])
   const [totalBalance, setTotalBalance] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -24,8 +39,8 @@ export default function Ledger() {
     setLoading(true); setError('')
     try {
       const data = await getLedger(communityId)
-      setEntries(data.entries)
-      setTotalBalance(data.total_balance)
+      setEntries(computeRunningBalances(data.entries))
+      setTotalBalance(data.balance)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load ledger')
     } finally { setLoading(false) }
@@ -87,7 +102,7 @@ export default function Ledger() {
                 }`}>
                   {entry.type === 'credit' ? '+' : '-'}{fmt(entry.amount)}
                 </span>
-                <span className="col-span-2 text-right text-[13px] font-bold">{fmt(entry.balance)}</span>
+                <span className="col-span-2 text-right text-[13px] font-bold">{fmt(entry.runningBalance)}</span>
                 <span className="col-span-2 flex justify-center">
                   <Badge color={entry.type === 'credit' ? 'green' : 'red'}>
                     {entry.type === 'credit'
