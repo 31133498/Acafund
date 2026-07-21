@@ -5,8 +5,6 @@ services:
   - type: web
     name: acafund-api
     env: docker
-    ## Dockerfile lives inside the backend/ subdirectory
-    dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     healthCheckPath: /health
     plan: starter          # upgrade to standard for production SLAs
