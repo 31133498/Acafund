@@ -123,6 +123,18 @@ async def initiate_payment(
     if col_member.status != MemberPaymentStatus.PENDING:
         raise HTTPException(status_code=400, detail="No pending amount due")
 
+    # Block duplicate in-flight payments for the same member slot
+    existing = (
+        db.query(Payment)
+        .filter(
+            Payment.collection_member_id == col_member.id,
+            Payment.status == PaymentStatus.PENDING,
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="A payment is already in progress for this collection")
+
     payment_reference = f"acafund-{collection_id}-{current_user.id}-{uuid4().hex[:8]}"
 
     payment = Payment(
