@@ -8,8 +8,10 @@ export default function PaymentReturn() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
 
-  // Monnify appends these — used only to derive collection/payment IDs
-  const collectionId = Number(searchParams.get('collection_id'))
+  // Monnify can corrupt query params on redirect — sessionStorage is the reliable source
+  const collectionId = Number(
+    searchParams.get('collection_id') ?? sessionStorage.getItem('acafund_payment_collection_id')
+  )
   const paymentId = Number(searchParams.get('payment_id'))
 
   const [status, setStatus] = useState<'confirming' | 'paid' | 'pending' | 'error'>('confirming')
@@ -22,6 +24,7 @@ export default function PaymentReturn() {
       const pay = await getMyPayment(collectionId)
       if (pay.status === 'paid') {
         setStatus('paid')
+        sessionStorage.removeItem('acafund_payment_collection_id')
         if (pollRef.current) clearInterval(pollRef.current)
       }
     } catch {

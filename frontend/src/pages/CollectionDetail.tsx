@@ -60,6 +60,7 @@ export default function CollectionDetail() {
     setActionError(''); setPaying(true)
     try {
       const { checkout_url } = await initiatePayment(collectionId)
+      sessionStorage.setItem('acafund_payment_collection_id', String(collectionId))
       window.location.href = checkout_url
     } catch (e: unknown) {
       setActionError(e instanceof Error ? e.message : 'Payment initiation failed')
