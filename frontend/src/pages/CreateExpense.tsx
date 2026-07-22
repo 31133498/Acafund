@@ -80,8 +80,8 @@ export default function CreateExpense() {
             </select>
           </div>
 
-          <Input id="receipt" label="Receipt URL (optional)" type="url"
-            placeholder="https://drive.google.com/..."
+          <Input id="receipt" label="Receipt URL (optional — will be stored in your drive)" type="url"
+            placeholder="Paste Google Drive link..."
             value={receiptUrl} onChange={(e) => setReceiptUrl(e.target.value)} />
 
           <Button type="submit" loading={loading} fullWidth size="lg">

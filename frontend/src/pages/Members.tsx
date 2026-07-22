@@ -89,9 +89,10 @@ export default function Members() {
                   <User size={16} />
                 </div>
                 <div>
-                  {/* Backend flag: MemberOut doesn't include full_name/email — user_id shown as fallback */}
-                  <p className="text-[14px] font-bold">User #{m.user_id}</p>
-                  <p className="text-[12px] text-on-surface-variant">ID: {m.user_id}</p>
+                  <p className="text-[14px] font-bold">{m.full_name ?? `Member #${m.user_id}`}</p>
+                  {m.email && (
+                    <p className="text-[12px] text-on-surface-variant">{m.email}</p>
+                  )}
                 </div>
               </div>
 
@@ -127,12 +128,6 @@ export default function Members() {
         </div>
       )}
 
-      <div className="border-2 border-black bg-tertiary-fixed p-4 text-[13px] text-on-surface-variant">
-        <strong>Backend flag:</strong> <code>GET /communities/{'{id}'}/members</code> returns{' '}
-        <code>user_id</code> but not <code>full_name</code> or <code>email</code>. Request the backend
-        to include user details in <code>MemberOut</code>, or add a{' '}
-        <code>GET /users/{'{id}'}</code> endpoint.
-      </div>
     </div>
   )
 }

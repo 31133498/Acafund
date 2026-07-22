@@ -17,7 +17,7 @@ const FEATURES: Feature[] = [
   {
     icon: CalendarDays,
     title: 'Plan & Vote',
-    desc: 'Propose budgets and let the community vote. Decisions are recorded in immutable logs so everyone knows what was agreed upon before the first naira is spent.',
+    desc: 'Propose budgets, vote as a community. Every decision is logged before a naira moves.',
     bg: 'bg-white',
     size: 'md:col-span-2',
     iconBg: 'bg-primary-container',
@@ -26,7 +26,7 @@ const FEATURES: Feature[] = [
   {
     icon: Wallet,
     title: 'Multi-channel Collection',
-    desc: 'Accept payments via bank transfer, USSD, or cards. Automatic reconciliation means no more manual matching of bank statements to student names.',
+    desc: 'Bank transfer, USSD, or card. Auto-reconciliation — no more matching screenshots to names.',
     bg: 'bg-secondary-fixed',
     size: 'md:col-span-2',
     iconBg: 'bg-white',
@@ -44,7 +44,7 @@ const FEATURES: Feature[] = [
   {
     icon: Eye,
     title: 'Total Transparency',
-    desc: 'A public dashboard for your community shows real-time balances and verified expenses.',
+    desc: 'Public dashboard. Real-time balance. Every verified expense in the open.',
     bg: 'bg-white',
     size: 'md:col-span-2',
     iconBg: 'bg-primary',

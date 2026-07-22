@@ -16,7 +16,7 @@ export default function JoinCommunity() {
     setError('')
     setLoading(true)
     try {
-      const res = await joinCommunity(code.trim())
+      const res = await joinCommunity(code.trim().toLowerCase())
       navigate(`/communities/${res.community_id}`)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : ''

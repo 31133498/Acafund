@@ -12,16 +12,13 @@ export default function MyCommunities() {
   const navigate = useNavigate()
   const [communities, setCommunities] = useState<Community[]>([])
   const [loading, setLoading] = useState(true)
-  // Backend flag: GET /users/me/communities not yet implemented
-  const [backendPending] = useState(true)
 
   useEffect(() => {
-    if (backendPending) { setLoading(false); return }
     getMyCommunities()
       .then(setCommunities)
       .catch(() => setCommunities([]))
       .finally(() => setLoading(false))
-  }, [backendPending])
+  }, [])
 
   if (loading) return <LoadingState />
 
@@ -70,17 +67,11 @@ export default function MyCommunities() {
           Your Communities
         </h2>
 
-        {backendPending ? (
-          <div className="border-2 border-black bg-tertiary-fixed p-5 neo-shadow">
-            <p className="text-[13px] font-bold text-on-tertiary-fixed">
-              ⚠️ Backend flag: <code className="bg-black/10 px-1">GET /users/me/communities</code> endpoint is not yet implemented. Create or join a community above and navigate there directly.
-            </p>
-          </div>
-        ) : communities.length === 0 ? (
+        {communities.length === 0 ? (
           <EmptyState
             icon={Users}
             title="No communities yet"
-            description="Create or join a community to get started."
+            description="Create your own community or join one with an invite code."
           />
         ) : (
           <div className="flex flex-col gap-3">

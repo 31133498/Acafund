@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     monnify_base_url: str = "https://sandbox.monnify.com"
 
     anthropic_api_key: str = ""
+    nvidia_api_key: str = ""
 
     frontend_origin: str = "http://localhost:3000"
     expense_approval_threshold: float = 50000

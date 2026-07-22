@@ -5,6 +5,8 @@ import {
   Sparkles, LogOut, Menu, X, ChevronLeft,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import Logo from './Logo'
+import FAB from './FAB'
 
 function NavItem({
   to, icon: Icon, label, onClick,
@@ -68,8 +70,8 @@ export default function AppLayout() {
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
       {/* Logo */}
-      <div className="px-4 py-5 border-b-2 border-black">
-        <span className="text-[20px] font-bold tracking-tight">AcaFund</span>
+      <div className="px-4 py-4 border-b-2 border-black">
+        <Logo size="md" />
       </div>
 
       {/* Back to communities */}
@@ -143,7 +145,7 @@ export default function AppLayout() {
           <button onClick={() => setMobileOpen(true)} aria-label="Open menu">
             <Menu size={22} />
           </button>
-          <span className="text-[18px] font-bold">AcaFund</span>
+          <Logo size="sm" />
           <button onClick={() => setMobileOpen(false)} className={mobileOpen ? '' : 'invisible'}>
             <X size={22} />
           </button>
@@ -153,6 +155,7 @@ export default function AppLayout() {
           <Outlet />
         </main>
       </div>
+      <FAB />
     </div>
   )
 }
