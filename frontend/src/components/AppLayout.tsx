@@ -126,7 +126,7 @@ export default function AppLayout() {
   return (
     <div className="min-h-screen flex bg-surface">
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex flex-col w-56 border-r-4 border-black bg-surface flex-shrink-0 sticky top-0 h-screen">
+      <aside className="hidden md:flex flex-col w-56 border-r-4 border-black bg-surface flex-shrink-0 sticky top-0 inset-y-0">
         <SidebarContent />
       </aside>
 
@@ -138,7 +138,7 @@ export default function AppLayout() {
         />
       )}
       <aside
-        className={`fixed top-0 left-0 z-50 h-screen w-[300px] border-r-4 border-black bg-surface flex flex-col md:hidden transition-transform duration-200 ${
+        className={`fixed inset-y-0 left-0 z-50 w-[300px] border-r-4 border-black bg-surface flex flex-col md:hidden transition-transform duration-200 ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
