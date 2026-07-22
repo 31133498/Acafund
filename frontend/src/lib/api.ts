@@ -5,7 +5,7 @@ import type {
   MemberRole, ActiveCollectionSummary, ReservedAccount,
 } from './types'
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+const BASE_URL = import.meta.env.VITE_API_URL ?? 'https://acafund-1.onrender.com'
 
 // ── Token helpers ─────────────────────────────────────────────────────────────
 
