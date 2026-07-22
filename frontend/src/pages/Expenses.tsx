@@ -1,24 +1,32 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Plus, Receipt, RefreshCw, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { Plus, Receipt, RefreshCw, CheckCircle, XCircle, Clock, Banknote } from 'lucide-react'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
 import LoadingState from '../components/ui/LoadingState'
 import EmptyState from '../components/ui/EmptyState'
 import ErrorState from '../components/ui/ErrorState'
-import { getExpenses, getMembers } from '../lib/api'
-import type { Expense, CommunityMember } from '../lib/types'
+import { getExpenses, getMembers, markExpensePaidOut } from '../lib/api'
+import type { Expense, CommunityMember, ExpenseStatus } from '../lib/types'
 import { useAuth } from '../contexts/AuthContext'
 
 function fmt(n: number) { return `₦${n.toLocaleString('en-NG')}` }
 
-const statusColor = (s: string) =>
-  s === 'approved' ? 'green' : s === 'rejected' ? 'red' : 'yellow'
+function statusBadge(s: ExpenseStatus): { color: 'yellow' | 'blue' | 'green' | 'red'; label: string } {
+  switch (s) {
+    case 'pending':  return { color: 'yellow', label: 'Pending Approval' }
+    case 'approved': return { color: 'blue',   label: 'Approved · Payout Pending' }
+    case 'paid_out': return { color: 'green',  label: 'Paid Out' }
+    case 'rejected': return { color: 'red',    label: 'Rejected' }
+  }
+}
 
-const StatusIcon = ({ status }: { status: string }) =>
-  status === 'approved' ? <CheckCircle size={16} className="text-primary" />
-  : status === 'rejected' ? <XCircle size={16} className="text-error" />
-  : <Clock size={16} className="text-on-surface-variant" />
+const StatusIcon = ({ status }: { status: ExpenseStatus }) => {
+  if (status === 'paid_out') return <Banknote size={16} className="text-primary" />
+  if (status === 'approved') return <CheckCircle size={16} className="text-tertiary" />
+  if (status === 'rejected') return <XCircle size={16} className="text-error" />
+  return <Clock size={16} className="text-on-surface-variant" />
+}
 
 export default function Expenses() {
   const { id } = useParams<{ id: string }>()
@@ -31,7 +39,14 @@ export default function Expenses() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  // Inline payout form state
+  const [openPayoutId, setOpenPayoutId] = useState<number | null>(null)
+  const [payoutRef, setPayoutRef] = useState('')
+  const [payoutLoading, setPayoutLoading] = useState(false)
+  const [payoutError, setPayoutError] = useState('')
+
   const myRole = members.find((m) => m.user_id === user?.id)?.role
+  const canMarkPaidOut = myRole === 'admin' || myRole === 'treasurer'
 
   const load = async () => {
     setLoading(true); setError('')
@@ -48,6 +63,19 @@ export default function Expenses() {
   }
 
   useEffect(() => { load() }, [communityId])
+
+  const submitPayout = async (expenseId: number) => {
+    if (!payoutRef.trim()) { setPayoutError('Reference is required'); return }
+    setPayoutLoading(true); setPayoutError('')
+    try {
+      const updated = await markExpensePaidOut(expenseId, payoutRef.trim())
+      setExpenses((prev) => prev.map((e) => e.id === expenseId ? updated : e))
+      setOpenPayoutId(null)
+      setPayoutRef('')
+    } catch (e: unknown) {
+      setPayoutError(e instanceof Error ? e.message : 'Failed to mark paid out')
+    } finally { setPayoutLoading(false) }
+  }
 
   const pendingExpenses = expenses.filter((e) => e.status === 'pending')
 
@@ -112,25 +140,88 @@ export default function Expenses() {
         />
       ) : (
         <div className="flex flex-col gap-2">
-          {expenses.map((exp) => (
-            <button
-              key={exp.id}
-              onClick={() => navigate(`/expenses/${exp.id}?community=${communityId}`)}
-              className="border-2 border-black bg-white p-4 neo-shadow neo-btn text-left flex items-center justify-between gap-4"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <StatusIcon status={exp.status} />
-                <div className="min-w-0">
-                  <p className="text-[15px] font-bold truncate">{exp.title}</p>
-                  <p className="text-[12px] text-on-surface-variant">{exp.category}</p>
-                </div>
+          {expenses.map((exp) => {
+            const { color, label } = statusBadge(exp.status)
+            const isPayoutOpen = openPayoutId === exp.id
+            return (
+              <div key={exp.id} className="border-2 border-black bg-white neo-shadow">
+                {/* Main row — navigates to detail */}
+                <button
+                  onClick={() => navigate(`/expenses/${exp.id}?community=${communityId}`)}
+                  className="p-4 neo-btn text-left flex items-center justify-between gap-4 w-full"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <StatusIcon status={exp.status} />
+                    <div className="min-w-0">
+                      <p className="text-[15px] font-bold truncate">{exp.title}</p>
+                      <p className="text-[12px] text-on-surface-variant">{exp.category}</p>
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-[15px] font-bold">{fmt(exp.amount)}</p>
+                    <Badge color={color}>{label}</Badge>
+                  </div>
+                </button>
+
+                {/* Payout prompt — approved + admin/treasurer only */}
+                {exp.status === 'approved' && canMarkPaidOut && (
+                  <div className="border-t-2 border-black">
+                    {isPayoutOpen ? (
+                      <div className="p-4 flex flex-col gap-3 bg-surface-container-low">
+                        <p className="text-[12px] font-bold uppercase tracking-[0.06em]">
+                          Enter bank transfer reference to confirm payout
+                        </p>
+                        <div className="flex gap-2 flex-wrap">
+                          <input
+                            autoFocus
+                            value={payoutRef}
+                            onChange={(e) => { setPayoutRef(e.target.value); setPayoutError('') }}
+                            placeholder="e.g. TRF20240112ABC"
+                            className="flex-1 min-w-0 border-2 border-black px-3 py-2 text-[14px] font-bold bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+                          />
+                          <Button size="sm" variant="black" loading={payoutLoading} onClick={() => submitPayout(exp.id)}>
+                            Confirm
+                          </Button>
+                          <Button size="sm" variant="white" onClick={() => { setOpenPayoutId(null); setPayoutRef('') }}>
+                            Cancel
+                          </Button>
+                        </div>
+                        {payoutError && <p className="text-[12px] text-error font-bold">{payoutError}</p>}
+                      </div>
+                    ) : (
+                      <div className="px-4 py-2.5 flex items-center justify-between gap-4 bg-tertiary-container/30">
+                        <p className="text-[12px] text-on-surface-variant">
+                          Money sent? Confirm the payout.
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="black"
+                          onClick={() => { setOpenPayoutId(exp.id); setPayoutRef(''); setPayoutError('') }}
+                        >
+                          Mark as Paid Out
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Payout proof — paid_out */}
+                {exp.status === 'paid_out' && (
+                  <div className="border-t-2 border-black px-4 py-2.5 bg-primary-container flex items-center gap-3">
+                    <Banknote size={14} className="text-primary flex-shrink-0" />
+                    {exp.payout_reference && (
+                      <p className="text-[12px] font-bold">Ref: {exp.payout_reference}</p>
+                    )}
+                    {exp.paid_out_at && (
+                      <p className="text-[11px] text-on-surface-variant">
+                        · {new Date(exp.paid_out_at).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
-              <div className="text-right flex-shrink-0">
-                <p className="text-[15px] font-bold">{fmt(exp.amount)}</p>
-                <Badge color={statusColor(exp.status) as 'green' | 'red' | 'yellow'}>{exp.status}</Badge>
-              </div>
-            </button>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

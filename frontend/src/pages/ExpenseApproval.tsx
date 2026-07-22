@@ -1,22 +1,30 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { ExternalLink, CheckCircle, XCircle } from 'lucide-react'
+import { useParams, useSearchParams } from 'react-router-dom'
+import { ExternalLink, CheckCircle, XCircle, Banknote, Building2 } from 'lucide-react'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
 import LoadingState from '../components/ui/LoadingState'
 import ErrorState from '../components/ui/ErrorState'
-import { getExpenses, approveExpense, rejectExpense, getMembers } from '../lib/api'
-import type { Expense, CommunityMember } from '../lib/types'
+import { getExpenses, approveExpense, rejectExpense, getMembers, markExpensePaidOut } from '../lib/api'
+import type { Expense, CommunityMember, ExpenseStatus } from '../lib/types'
 import { useAuth } from '../contexts/AuthContext'
 
 function fmt(n: number) { return `₦${n.toLocaleString('en-NG')}` }
+
+function statusBadge(s: ExpenseStatus): { color: 'yellow' | 'blue' | 'green' | 'red'; label: string } {
+  switch (s) {
+    case 'pending':  return { color: 'yellow', label: 'Pending Approval' }
+    case 'approved': return { color: 'blue',   label: 'Approved · Payout Pending' }
+    case 'paid_out': return { color: 'green',  label: 'Paid Out' }
+    case 'rejected': return { color: 'red',    label: 'Rejected' }
+  }
+}
 
 export default function ExpenseApproval() {
   const { id } = useParams<{ id: string }>()
   const [searchParams] = useSearchParams()
   const expenseId = Number(id)
   const communityId = Number(searchParams.get('community'))
-  const navigate = useNavigate()
   const { user } = useAuth()
 
   const [expense, setExpense] = useState<Expense | null>(null)
@@ -29,7 +37,14 @@ export default function ExpenseApproval() {
   const [noteError, setNoteError] = useState('')
   const [actionError, setActionError] = useState('')
 
+  // Payout form state
+  const [payoutOpen, setPayoutOpen] = useState(false)
+  const [payoutRef, setPayoutRef] = useState('')
+  const [payoutLoading, setPayoutLoading] = useState(false)
+  const [payoutError, setPayoutError] = useState('')
+
   const myRole = members.find((m) => m.user_id === user?.id)?.role
+  const canMarkPaidOut = myRole === 'admin' || myRole === 'treasurer'
 
   useEffect(() => {
     if (!communityId) {
@@ -59,8 +74,8 @@ export default function ExpenseApproval() {
     e.preventDefault()
     setApproving(true); setActionError('')
     try {
-      await approveExpense(expenseId, note.trim() || undefined)
-      navigate(-1)
+      const updated = await approveExpense(expenseId, note.trim() || undefined)
+      setExpense(updated)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Approval failed'
       setActionError(
@@ -76,24 +91,36 @@ export default function ExpenseApproval() {
     if (!note.trim()) { setNoteError('A reason is required when rejecting.'); return }
     setNoteError(''); setRejecting(true); setActionError('')
     try {
-      await rejectExpense(expenseId, note.trim())
-      navigate(-1)
+      const updated = await rejectExpense(expenseId, note.trim())
+      setExpense(updated)
     } catch (err: unknown) {
       setActionError(err instanceof Error ? err.message : 'Rejection failed')
     } finally { setRejecting(false) }
   }
 
+  const handlePayout = async () => {
+    if (!payoutRef.trim()) { setPayoutError('Reference is required'); return }
+    setPayoutLoading(true); setPayoutError('')
+    try {
+      const updated = await markExpensePaidOut(expenseId, payoutRef.trim())
+      setExpense(updated)
+      setPayoutOpen(false)
+      setPayoutRef('')
+    } catch (err: unknown) {
+      setPayoutError(err instanceof Error ? err.message : 'Failed to mark paid out')
+    } finally { setPayoutLoading(false) }
+  }
+
   if (loading) return <LoadingState />
   if (error || !expense) return <ErrorState message={error} />
 
+  const { color, label } = statusBadge(expense.status)
   const isActionable = myRole === 'auditor' && expense.status === 'pending'
 
   return (
     <div className="max-w-lg mx-auto flex flex-col gap-6">
       <div>
-        <Badge color={expense.status === 'approved' ? 'green' : expense.status === 'rejected' ? 'red' : 'yellow'}>
-          {expense.status}
-        </Badge>
+        <Badge color={color}>{label}</Badge>
         <h1 className="text-[28px] font-bold tracking-tight mt-2">{expense.title}</h1>
       </div>
 
@@ -124,6 +151,34 @@ export default function ExpenseApproval() {
           <p className="text-[14px]">{new Date(expense.created_at).toLocaleString()}</p>
         </div>
 
+        {/* Destination account */}
+        {(expense.destination_bank_name || expense.destination_account_number) && (
+          <div className="border-2 border-black bg-surface-container p-4 flex flex-col gap-2">
+            <div className="flex items-center gap-2 mb-1">
+              <Building2 size={14} className="text-on-surface-variant" />
+              <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">Where to Send</p>
+            </div>
+            {expense.destination_bank_name && (
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">Bank</p>
+                <p className="text-[14px] font-bold">{expense.destination_bank_name}</p>
+              </div>
+            )}
+            {expense.destination_account_number && (
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">Account Number</p>
+                <p className="text-[16px] font-bold tracking-[0.06em]">{expense.destination_account_number}</p>
+              </div>
+            )}
+            {expense.destination_account_name && (
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">Account Name</p>
+                <p className="text-[14px] font-bold">{expense.destination_account_name}</p>
+              </div>
+            )}
+          </div>
+        )}
+
         {expense.receipt_url && (
           <a
             href={expense.receipt_url}
@@ -142,6 +197,69 @@ export default function ExpenseApproval() {
           </div>
         )}
       </div>
+
+      {/* Paid out proof */}
+      {expense.status === 'paid_out' && (
+        <div className="border-2 border-black bg-primary-container p-4 flex items-center gap-3">
+          <Banknote size={16} className="text-primary flex-shrink-0" />
+          <div>
+            <p className="text-[12px] font-bold uppercase tracking-[0.06em] text-on-surface-variant">Payout Confirmed</p>
+            {expense.payout_reference && (
+              <p className="text-[14px] font-bold">Ref: {expense.payout_reference}</p>
+            )}
+            {expense.paid_out_at && (
+              <p className="text-[12px] text-on-surface-variant">
+                {new Date(expense.paid_out_at).toLocaleString()}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Mark as Paid Out — admin/treasurer when approved */}
+      {expense.status === 'approved' && canMarkPaidOut && (
+        <div className="border-2 border-black bg-white neo-shadow">
+          {payoutOpen ? (
+            <div className="p-5 flex flex-col gap-3">
+              <p className="text-[12px] font-bold uppercase tracking-[0.06em]">
+                Enter bank transfer reference to confirm payout
+              </p>
+              <div className="flex gap-2 flex-wrap">
+                <input
+                  autoFocus
+                  value={payoutRef}
+                  onChange={(e) => { setPayoutRef(e.target.value); setPayoutError('') }}
+                  placeholder="e.g. TRF20240112ABC"
+                  className="flex-1 min-w-0 border-2 border-black px-3 py-2 text-[14px] font-bold bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                <Button size="sm" variant="black" loading={payoutLoading} onClick={handlePayout}>
+                  Confirm
+                </Button>
+                <Button size="sm" variant="white" onClick={() => { setPayoutOpen(false); setPayoutRef('') }}>
+                  Cancel
+                </Button>
+              </div>
+              {payoutError && <p className="text-[12px] text-error font-bold">{payoutError}</p>}
+            </div>
+          ) : (
+            <div className="px-5 py-4 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-[14px] font-bold">Ready to pay out?</p>
+                <p className="text-[12px] text-on-surface-variant mt-0.5">
+                  Transfer the money, then confirm with a reference.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="black"
+                onClick={() => { setPayoutOpen(true); setPayoutError('') }}
+              >
+                Mark as Paid Out
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Approval actions — auditor only */}
       {isActionable && (

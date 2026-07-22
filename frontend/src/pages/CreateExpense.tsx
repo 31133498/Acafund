@@ -17,6 +17,9 @@ export default function CreateExpense() {
   const [title, setTitle] = useState('')
   const [amount, setAmount] = useState('')
   const [category, setCategory] = useState(CATEGORIES[0])
+  const [destBankName, setDestBankName] = useState('')
+  const [destAccountNumber, setDestAccountNumber] = useState('')
+  const [destAccountName, setDestAccountName] = useState('')
   const [receiptUrl, setReceiptUrl] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -27,6 +30,10 @@ export default function CreateExpense() {
     if (!title.trim()) e.title = 'Title is required'
     const amt = parseFloat(amount)
     if (!amount || isNaN(amt) || amt <= 0) e.amount = 'Enter a valid amount'
+    if (!destBankName.trim()) e.destBankName = 'Bank name is required'
+    if (!destAccountNumber.trim()) e.destAccountNumber = 'Account number is required'
+    else if (!/^\d+$/.test(destAccountNumber.trim())) e.destAccountNumber = 'Account number must be digits only'
+    if (!destAccountName.trim()) e.destAccountName = 'Account name is required'
     return e
   }
 
@@ -42,6 +49,9 @@ export default function CreateExpense() {
         amount: parseFloat(amount),
         category,
         receipt_url: receiptUrl.trim() || undefined,
+        destination_bank_name: destBankName.trim(),
+        destination_account_number: destAccountNumber.trim(),
+        destination_account_name: destAccountName.trim(),
       })
       navigate(`/expenses/${exp.id}?community=${communityId}`)
     } catch (err: unknown) {
@@ -78,6 +88,20 @@ export default function CreateExpense() {
             >
               {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
+          </div>
+
+          {/* Destination account — where the money will be sent */}
+          <div className="border-2 border-black bg-surface-container p-4 flex flex-col gap-4">
+            <p className="text-[12px] font-bold uppercase tracking-[0.08em]">Where to Send the Money</p>
+            <Input id="destBankName" label="Bank Name" placeholder="e.g. First Bank"
+              value={destBankName} onChange={(e) => setDestBankName(e.target.value)}
+              error={fieldErrors.destBankName} />
+            <Input id="destAccountNumber" label="Account Number" placeholder="e.g. 3012345678"
+              value={destAccountNumber} onChange={(e) => setDestAccountNumber(e.target.value)}
+              error={fieldErrors.destAccountNumber} />
+            <Input id="destAccountName" label="Account Name" placeholder="e.g. Chidi Kamara"
+              value={destAccountName} onChange={(e) => setDestAccountName(e.target.value)}
+              error={fieldErrors.destAccountName} />
           </div>
 
           <Input id="receipt" label="Receipt URL (optional — will be stored in your drive)" type="url"

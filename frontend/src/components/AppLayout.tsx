@@ -68,10 +68,17 @@ export default function AppLayout() {
     : []
 
   const SidebarContent = () => (
-    <div className="flex flex-col h-full">
-      {/* Logo */}
-      <div className="px-4 py-4 border-b-2 border-black">
+    <div className="flex flex-col h-full overflow-y-auto">
+      {/* Logo + mobile close */}
+      <div className="px-4 py-4 border-b-2 border-black flex items-center justify-between">
         <Logo size="md" />
+        <button
+          className="md:hidden p-1 -mr-1"
+          onClick={() => setMobileOpen(false)}
+          aria-label="Close menu"
+        >
+          <X size={22} />
+        </button>
       </div>
 
       {/* Back to communities */}
@@ -119,7 +126,7 @@ export default function AppLayout() {
   return (
     <div className="min-h-screen flex bg-surface">
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex flex-col w-56 border-r-4 border-black bg-surface flex-shrink-0 sticky top-0 h-screen">
+      <aside className="hidden md:flex flex-col w-56 border-r-4 border-black bg-surface flex-shrink-0 sticky top-0 inset-y-0">
         <SidebarContent />
       </aside>
 
@@ -131,7 +138,7 @@ export default function AppLayout() {
         />
       )}
       <aside
-        className={`fixed top-0 left-0 z-50 h-screen w-56 border-r-4 border-black bg-surface flex flex-col md:hidden transition-transform duration-200 ${
+        className={`fixed inset-y-0 left-0 z-50 w-[300px] border-r-4 border-black bg-surface flex flex-col md:hidden transition-transform duration-200 ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -141,14 +148,11 @@ export default function AppLayout() {
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Mobile top bar */}
-        <header className="md:hidden sticky top-0 z-30 flex items-center justify-between px-4 py-3 bg-surface border-b-4 border-black">
+        <header className="md:hidden sticky top-0 z-30 flex items-center gap-4 px-4 py-3 bg-surface border-b-4 border-black">
           <button onClick={() => setMobileOpen(true)} aria-label="Open menu">
             <Menu size={22} />
           </button>
           <Logo size="sm" />
-          <button onClick={() => setMobileOpen(false)} className={mobileOpen ? '' : 'invisible'}>
-            <X size={22} />
-          </button>
         </header>
 
         <main className="flex-1 p-4 md:p-8 max-w-5xl w-full mx-auto">

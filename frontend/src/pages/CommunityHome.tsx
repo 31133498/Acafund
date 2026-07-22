@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Wallet, Users, Receipt, BookOpen, TrendingUp, RefreshCw, Copy, Check } from 'lucide-react'
+import { Wallet, Users, Receipt, BookOpen, TrendingUp, RefreshCw, Copy, Check, Building2, AlertCircle } from 'lucide-react'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
 import LoadingState from '../components/ui/LoadingState'
 import ErrorState from '../components/ui/ErrorState'
-import { getCommunity, getMembers, getCollections } from '../lib/api'
-import type { Community, CommunityMember, Collection } from '../lib/types'
+import { getCommunity, getMembers, getCollections, getReservedAccount, setupReservedAccount } from '../lib/api'
+import type { Community, CommunityMember, Collection, ReservedAccount } from '../lib/types'
 import { useAuth } from '../contexts/AuthContext'
 
 function fmt(n: number) {
@@ -22,9 +22,13 @@ export default function CommunityHome() {
   const [community, setCommunity] = useState<Community | null>(null)
   const [members, setMembers] = useState<CommunityMember[]>([])
   const [collections, setCollections] = useState<Collection[]>([])
+  const [reservedAccount, setReservedAccount] = useState<ReservedAccount | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+  const [copiedAcct, setCopiedAcct] = useState(false)
+  const [settingUp, setSettingUp] = useState(false)
+  const [setupError, setSetupError] = useState('')
 
   const myRole = members.find((m) => m.user_id === user?.id)?.role
 
@@ -32,14 +36,17 @@ export default function CommunityHome() {
     setLoading(true)
     setError('')
     try {
-      const [c, mems, cols] = await Promise.all([
+      const [c, mems, cols, ra] = await Promise.all([
         getCommunity(communityId),
         getMembers(communityId),
         getCollections(communityId),
+        getReservedAccount(communityId),
       ])
       setCommunity(c)
       setMembers(mems)
       setCollections(cols)
+      // backend may embed it in community or return via dedicated endpoint
+      setReservedAccount(c.reserved_account ?? ra)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load dashboard')
     } finally {
@@ -54,6 +61,26 @@ export default function CommunityHome() {
     navigator.clipboard.writeText(community.invite_code)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const copyAcctNumber = () => {
+    if (!reservedAccount) return
+    navigator.clipboard.writeText(reservedAccount.account_number)
+    setCopiedAcct(true)
+    setTimeout(() => setCopiedAcct(false), 2000)
+  }
+
+  const handleSetupAccount = async () => {
+    setSettingUp(true)
+    setSetupError('')
+    try {
+      const ra = await setupReservedAccount(communityId)
+      setReservedAccount(ra)
+    } catch (e: unknown) {
+      setSetupError(e instanceof Error ? e.message : 'Setup failed')
+    } finally {
+      setSettingUp(false)
+    }
   }
 
   if (loading) return <LoadingState />
@@ -101,6 +128,91 @@ export default function CommunityHome() {
           </button>
         </div>
       )}
+
+      {/* Direct Transfer card */}
+      <div>
+        <h2 className="text-[14px] font-bold uppercase tracking-[0.08em] text-on-surface-variant mb-3">
+          Direct Transfer
+        </h2>
+
+        {reservedAccount?.status === 'active' ? (
+          <div className="border-2 border-black bg-white neo-shadow p-5 flex flex-col gap-4">
+            <div className="flex items-center gap-2">
+              <Building2 size={16} className="text-primary" />
+              <p className="text-[13px] text-on-surface-variant">
+                Pay dues or donate by transferring directly to this account.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">Bank</p>
+                <p className="text-[15px] font-bold">{reservedAccount.bank_name}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant mb-1">
+                  Account Number
+                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-[18px] font-bold tracking-[0.08em]">{reservedAccount.account_number}</p>
+                  <button
+                    onClick={copyAcctNumber}
+                    className="border-2 border-black p-1.5 neo-shadow-sm neo-btn bg-white flex-shrink-0"
+                    aria-label="Copy account number"
+                  >
+                    {copiedAcct ? <Check size={12} /> : <Copy size={12} />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">Account Name</p>
+                <p className="text-[15px] font-bold">{reservedAccount.account_name}</p>
+              </div>
+            </div>
+          </div>
+        ) : reservedAccount?.status === 'pending' ? (
+          <div className="border-2 border-black bg-surface-container p-4 flex items-center gap-3">
+            <AlertCircle size={16} className="text-on-surface-variant flex-shrink-0" />
+            <div>
+              <p className="text-[13px] font-bold">Account setup in progress</p>
+              <p className="text-[12px] text-on-surface-variant mt-0.5">
+                Refresh in a few minutes to check the status.
+              </p>
+            </div>
+          </div>
+        ) : reservedAccount?.status === 'failed' ? (
+          <div className="border-2 border-error bg-error-container p-4 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-[13px] font-bold text-error">Account setup failed</p>
+              <p className="text-[12px] text-on-surface-variant mt-0.5">
+                {setupError || 'Something went wrong. Try again.'}
+              </p>
+            </div>
+            {myRole === 'admin' && (
+              <Button size="sm" variant="white" loading={settingUp} onClick={handleSetupAccount}>
+                Retry Setup
+              </Button>
+            )}
+          </div>
+        ) : myRole === 'admin' ? (
+          <div className="border-2 border-black bg-surface-container p-4 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-[14px] font-bold">No direct transfer account</p>
+              <p className="text-[12px] text-on-surface-variant mt-0.5">
+                Set one up so members can pay by bank transfer.
+              </p>
+            </div>
+            <Button size="sm" loading={settingUp} onClick={handleSetupAccount}>
+              Set Up Account
+            </Button>
+          </div>
+        ) : (
+          <div className="border-2 border-black bg-surface-container p-4">
+            <p className="text-[13px] text-on-surface-variant">
+              No transfer account set up yet. Ask your admin.
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Stats row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
