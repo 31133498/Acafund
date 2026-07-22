@@ -2,6 +2,12 @@
 
 AcaFund is a financial management platform built for African student communities. It lets groups collect dues, track every naira through a community treasury, govern expense requests with an approval workflow, and publish transparency reports that any member can read.
 
+## Architecture
+
+![AcaFund Architecture](docs/acafund-architecture.svg)
+
+The diagram above shows the full money flow: students pay through Monnify checkout or direct bank transfer, every payment is verified server-side before the ledger is credited, and all payouts are manual with a payout reference recorded before the ledger is debited.
+
 ## Stack
 
 | Layer | Tech |
@@ -85,10 +91,11 @@ docker compose exec api sh -c "RUN_LIVE_MONNIFY_TESTS=1 python -m pytest tests/t
 ### Key endpoints
 
 ```
-POST   /communities                             Create a community (auto-reserves a Monnify account)
+POST   /communities                             Create a community
 POST   /communities/join                        Join with an invite code
-POST   /communities/{id}/reserved-account/setup Manually provision Monnify account if auto-setup failed
-GET    /communities/{id}                        Community details including bank account info
+GET    /communities/{id}                        Community details
+GET    /communities/{id}/reserved-account       Monnify reserved account for the community (null if not set)
+POST   /communities/{id}/reserved-account       Provision a Monnify reserved account (BVN required)
 GET    /users/me/communities                    All communities the current user belongs to
 
 POST   /communities/{id}/collections            Create a dues collection
@@ -97,7 +104,7 @@ POST   /collections/{id}/close                  Close a collection
 
 POST   /expenses/{id}/approve                   Auditor approves an expense
 POST   /expenses/{id}/reject                    Auditor rejects an expense
-POST   /expenses/{id}/mark-disbursed            Admin or Treasurer records that payment was sent
+POST   /expenses/{id}/mark-paid-out             Admin or Treasurer records payout reference (triggers ledger debit)
 
 GET    /collections/{id}/transparency           Public report with payment stats, expenses, and bank details
 POST   /webhooks/monnify                        Webhook receiver for structured payments and direct transfers
@@ -141,10 +148,10 @@ This handles both structured student payments and direct bank transfers into com
 | `test_communities.py` | Create, join, roles, invite codes | 11 |
 | `test_collections.py` | Collections lifecycle, member enrollment | 16 |
 | `test_payments.py` | Checkout initiation, webhook reconciliation, sync | 5 |
-| `test_expenses.py` | Submit, approve, reject, ledger | 7 |
+| `test_expenses.py` | Submit, approve, reject, mark-paid-out, ledger debit timing | 10 |
 | `test_reports.py` | Transparency report, dashboard, AI assistant | 4 |
-| `test_reserved_account.py` | Monnify reserved account setup and webhook handling | 6 |
-| `test_disbursement.py` | Mark-as-disbursed flow, payout labels, three-state transparency | 8 |
+| `test_reserved_account.py` | Monnify reserved account setup and webhook handling | 7 |
+| `test_disbursement.py` | Mark-paid-out flow, payout reference, three-state transparency | 8 |
 | `test_monnify_live.py` | Live Monnify sandbox (skipped by default) | 1 |
 
 67 automated tests, all passing.

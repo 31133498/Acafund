@@ -50,7 +50,12 @@ export default function CommunityHome() {
       // backend may embed it in community or return via dedicated endpoint
       setReservedAccount(c.reserved_account ?? ra)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to load dashboard')
+      const msg = e instanceof Error ? e.message : 'Failed to load dashboard'
+      if (msg === 'Insufficient permissions' || msg.toLowerCase().includes('not found')) {
+        navigate('/communities')
+        return
+      }
+      setError(msg)
     } finally {
       setLoading(false)
     }

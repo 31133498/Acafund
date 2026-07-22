@@ -17,7 +17,7 @@ does not contain enough information to answer, say so explicitly — never
 guess or invent a number. Be concise and direct."""
 
 NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
-MODEL = "nvidia/llama-3.1-nemotron-70b-instruct"
+MODEL = "nvidia/llama-3.3-nemotron-super-49b-v1"
 
 
 def _build_context(db: Session, community_id: int) -> dict:
