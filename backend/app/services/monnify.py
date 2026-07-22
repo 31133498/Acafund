@@ -72,30 +72,33 @@ class MonnifyService:
             raise MonnifyError(resp.status_code, resp.text)
         return resp.json()["responseBody"]
 
-    async def reserve_account(
+    async def create_reserved_account(
         self,
-        account_reference: str,
-        account_name: str,
-        customer_email: str,
-        customer_name: str,
+        community_id: int,
+        community_name: str,
+        admin_name: str,
+        bvn: str,
     ) -> dict:
-        """Reserve a dedicated bank account for a community.
+        """Create a dedicated reserved bank account for a community.
 
-        Returns dict with keys: account_number, bank_name, account_name.
+        Returns dict with keys: account_number, bank_name, account_name, status (lowercase).
         """
         token = await self._get_access_token()
+        account_reference = f"acafund-comm-{community_id}"
+        customer_email = f"community-{community_id}@acafund.app"
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 f"{settings.monnify_base_url}/api/v2/bank-transfer/reserved-accounts",
                 headers={"Authorization": f"Bearer {token}"},
                 json={
                     "accountReference": account_reference,
-                    "accountName": account_name,
+                    "accountName": community_name,
                     "currencyCode": "NGN",
                     "contractCode": settings.monnify_contract_code,
                     "customerEmail": customer_email,
-                    "customerName": customer_name,
-                    "getAllAvailableBanks": False,
+                    "customerName": admin_name,
+                    "bvn": bvn,
+                    "getAllAvailableBanks": True,
                 },
             )
         if resp.status_code != 200:
@@ -103,10 +106,12 @@ class MonnifyService:
         body = resp.json()["responseBody"]
         accounts = body.get("accounts", [])
         first = accounts[0] if accounts else {}
+        raw_status = body.get("status", "ACTIVE")
         return {
             "account_number": first.get("accountNumber", ""),
             "bank_name": first.get("bankName", ""),
-            "account_name": body.get("accountName", account_name),
+            "account_name": body.get("accountName", community_name),
+            "status": raw_status.lower(),
         }
 
     async def verify_transaction(self, payment_reference: str) -> dict:

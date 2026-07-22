@@ -29,12 +29,13 @@ class Expense(Base):
     destination_account_number = Column(String, nullable=True)
     destination_account_name = Column(String, nullable=True)
 
-    # Disbursement tracking (set when Admin/Treasurer marks as paid out)
-    disbursed_at = Column(DateTime(timezone=True), nullable=True)
-    disbursed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
-    disbursement_reference = Column(String, nullable=True)
+    # Payout tracking (set when Admin/Treasurer marks as paid out)
+    payout_reference = Column(String, nullable=True)
+    paid_out_at = Column(DateTime(timezone=True), nullable=True)
+    paid_out_by = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     community = relationship("Community")
     collection = relationship("Collection")
     requester = relationship("User", foreign_keys=[requested_by])
     decider = relationship("User", foreign_keys=[approved_by])
+    payer = relationship("User", foreign_keys=[paid_out_by])

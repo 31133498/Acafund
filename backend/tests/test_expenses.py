@@ -78,7 +78,8 @@ def test_member_cannot_create_expense(client):
     assert resp.status_code == 403
 
 
-def test_auditor_approve_writes_exactly_one_debit_ledger_entry(client, db_session):
+def test_approve_does_not_write_ledger_debit(client, db_session):
+    """Approval sets status=approved but does NOT touch the ledger."""
     s = _setup_exp(client, "e3")
     expense_id = _create_expense(client, s["treasurer"]["headers"], s["comm"]["id"], amount=800.0).json()["id"]
 
@@ -89,6 +90,36 @@ def test_auditor_approve_writes_exactly_one_debit_ledger_entry(client, db_sessio
     )
     assert resp.status_code == 200
     assert resp.json()["status"] == "approved"
+
+    debits = (
+        db_session.query(LedgerEntry)
+        .filter(
+            LedgerEntry.community_id == s["comm"]["id"],
+            LedgerEntry.type == LedgerEntryType.DEBIT,
+        )
+        .all()
+    )
+    assert len(debits) == 0
+
+
+def test_mark_paid_out_writes_exactly_one_debit(client, db_session):
+    """mark-paid-out sets status=paid_out and creates the ledger debit."""
+    s = _setup_exp(client, "e3b")
+    expense_id = _create_expense(client, s["treasurer"]["headers"], s["comm"]["id"], amount=800.0).json()["id"]
+
+    client.post(f"/expenses/{expense_id}/approve", json={}, headers=s["auditor"]["headers"])
+
+    resp = client.post(
+        f"/expenses/{expense_id}/mark-paid-out",
+        json={"payout_reference": "TXN-111"},
+        headers=s["admin"]["headers"],
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "paid_out"
+    assert data["payout_reference"] == "TXN-111"
+    assert data["paid_out_at"] is not None
+    assert data["paid_out_by"] == s["admin"]["id"]
 
     debits = (
         db_session.query(LedgerEntry)
@@ -121,24 +152,48 @@ def test_approving_expense_twice_is_rejected(client, db_session):
         )
         .all()
     )
-    assert len(debits) == 1  # only one debit, never doubled
+    assert len(debits) == 0
+
+
+def test_mark_paid_out_requires_approved_status(client):
+    """Cannot mark-paid-out a pending expense."""
+    s = _setup_exp(client, "e4b")
+    expense_id = _create_expense(client, s["treasurer"]["headers"], s["comm"]["id"]).json()["id"]
+
+    resp = client.post(
+        f"/expenses/{expense_id}/mark-paid-out",
+        json={"payout_reference": "TXN-BAD"},
+        headers=s["admin"]["headers"],
+    )
+    assert resp.status_code == 409
+    assert "approved" in resp.json()["detail"].lower()
+
+
+def test_mark_paid_out_forbidden_for_regular_member(client):
+    s = _setup_exp(client, "e4c")
+    expense_id = _create_expense(client, s["treasurer"]["headers"], s["comm"]["id"]).json()["id"]
+    client.post(f"/expenses/{expense_id}/approve", json={}, headers=s["auditor"]["headers"])
+
+    resp = client.post(
+        f"/expenses/{expense_id}/mark-paid-out",
+        json={"payout_reference": "TXN-HACK"},
+        headers=s["member"]["headers"],
+    )
+    assert resp.status_code == 403
 
 
 def test_user_cannot_approve_own_expense(client):
     """Treasurer creates expense; admin switches them to auditor; they cannot self-approve."""
     s = _setup_exp(client, "e5")
 
-    # Treasurer creates expense
     expense_id = _create_expense(client, s["treasurer"]["headers"], s["comm"]["id"]).json()["id"]
 
-    # Admin promotes the treasurer to auditor role
     _set_role(client, s["admin"]["headers"], s["comm"]["id"], s["treasurer"]["id"], "auditor")
 
-    # That user (now auditor) tries to approve their own expense
     resp = client.post(
         f"/expenses/{expense_id}/approve",
         json={},
-        headers=s["treasurer"]["headers"],  # same user, now auditor
+        headers=s["treasurer"]["headers"],
     )
     assert resp.status_code == 403
     assert "own" in resp.json()["detail"].lower()
@@ -158,18 +213,16 @@ def test_rejected_expense_does_not_touch_ledger(client, db_session):
 
     entries = (
         db_session.query(LedgerEntry)
-        .filter(
-            LedgerEntry.community_id == s["comm"]["id"],
-        )
+        .filter(LedgerEntry.community_id == s["comm"]["id"])
         .all()
     )
     assert len(entries) == 0
 
 
-def test_ledger_balance_matches_computed_expectation(client, db_session):
+def test_ledger_balance_drops_only_after_paid_out(client, db_session):
+    """Balance unchanged after approval; drops only after mark-paid-out."""
     s = _setup_exp(client, "e7")
 
-    # Seed one credit entry directly (stands in for a processed payment)
     credit = LedgerEntry(
         community_id=s["comm"]["id"],
         type=LedgerEntryType.CREDIT,
@@ -181,15 +234,22 @@ def test_ledger_balance_matches_computed_expectation(client, db_session):
     db_session.add(credit)
     db_session.commit()
 
-    # Approve two expenses → two debits
     eid1 = _create_expense(client, s["treasurer"]["headers"], s["comm"]["id"], amount=1200.0).json()["id"]
     eid2 = _create_expense(client, s["treasurer"]["headers"], s["comm"]["id"], amount=800.0).json()["id"]
+
     client.post(f"/expenses/{eid1}/approve", json={}, headers=s["auditor"]["headers"])
     client.post(f"/expenses/{eid2}/approve", json={}, headers=s["auditor"]["headers"])
 
-    # Expected: 5000 (credit) - 1200 (debit) - 800 (debit) = 3000
+    # After approval only — balance still 5000
     resp = client.get(f"/communities/{s['comm']['id']}/ledger", headers=s["admin"]["headers"])
-    assert resp.status_code == 200
+    assert resp.json()["balance"] == 5000.0
+
+    # Mark both as paid out
+    client.post(f"/expenses/{eid1}/mark-paid-out", json={"payout_reference": "REF-1"}, headers=s["admin"]["headers"])
+    client.post(f"/expenses/{eid2}/mark-paid-out", json={"payout_reference": "REF-2"}, headers=s["admin"]["headers"])
+
+    # 5000 - 1200 - 800 = 3000
+    resp = client.get(f"/communities/{s['comm']['id']}/ledger", headers=s["admin"]["headers"])
     data = resp.json()
     assert data["balance"] == 3000.0
     assert data["total"] == 3  # 1 credit + 2 debits

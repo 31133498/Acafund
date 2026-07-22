@@ -11,10 +11,10 @@ from app.models.collection import Collection, CollectionMember
 from app.models.community import Community, CommunityMember
 from app.models.enums import (
     CollectionStatus,
-    ExpenseStatus,
     LedgerEntryType,
     MemberPaymentStatus,
     MemberRole,
+    ExpenseStatus,
 )
 from app.models.expense import Expense
 from app.models.ledger import LedgerEntry
@@ -32,7 +32,6 @@ class ExpensePublicOut(BaseModel):
     amount: float
     category: str
     status: ExpenseStatus
-    payout_label: str
 
 
 class DirectTransferInfo(BaseModel):
@@ -82,16 +81,6 @@ class DashboardOut(BaseModel):
     recent_ledger: List[LedgerEntryOut]
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _expense_payout_label(expense: Expense) -> str:
-    if expense.status == ExpenseStatus.PENDING:
-        return "Pending Approval"
-    if expense.status == ExpenseStatus.REJECTED:
-        return "Rejected"
-    if expense.status == ExpenseStatus.APPROVED:
-        return "Paid Out" if expense.disbursed_at else "Approved — Payout Pending"
-    return expense.status.value
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -122,11 +111,11 @@ def get_transparency(
 
     community = db.query(Community).filter(Community.id == col.community_id).first()
     direct_transfer = None
-    if community and community.monnify_account_number:
+    if community and community.reserved_account_number:
         direct_transfer = DirectTransferInfo(
-            account_number=community.monnify_account_number,
-            bank_name=community.monnify_bank_name,
-            account_name=community.monnify_account_name,
+            account_number=community.reserved_account_number,
+            bank_name=community.reserved_bank_name,
+            account_name=community.reserved_account_name,
         )
 
     return TransparencyOut(
@@ -146,7 +135,6 @@ def get_transparency(
                 amount=e.amount,
                 category=e.category,
                 status=e.status,
-                payout_label=_expense_payout_label(e),
             )
             for e in expenses
         ],

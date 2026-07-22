@@ -29,6 +29,7 @@ class MemberPaymentStatus(str, enum.Enum):
 class ExpenseStatus(str, enum.Enum):
     PENDING = "pending"
     APPROVED = "approved"
+    PAID_OUT = "paid_out"
     REJECTED = "rejected"
 
 

@@ -1,4 +1,4 @@
-"""Tests for Part B: Mark as Disbursed (expense payout tracking)."""
+"""Tests for the mark-paid-out flow and paid_out status transitions."""
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -61,64 +61,64 @@ def _setup(client):
     }
 
 
-# ── payout_label tests ────────────────────────────────────────────────────────
+# ── status transition tests ───────────────────────────────────────────────────
 
-def test_payout_label_pending(client):
+def test_status_is_pending_after_creation(client):
     ctx = _setup(client)
     expenses = client.get(
         f"/communities/{ctx['comm_id']}/expenses",
         headers=ctx["admin"]["headers"],
     ).json()
-    assert expenses[0]["payout_label"] == "Pending Approval"
+    assert expenses[0]["status"] == "pending"
 
 
-def test_payout_label_approved_payout_pending(client):
-    ctx = _setup(client)
-    client.post(
-        f"/expenses/{ctx['expense_id']}/approve",
-        json={"decision_note": None},
-        headers=ctx["auditor"]["headers"],
-    )
-    expenses = client.get(
-        f"/communities/{ctx['comm_id']}/expenses",
-        headers=ctx["admin"]["headers"],
-    ).json()
-    assert expenses[0]["payout_label"] == "Approved — Payout Pending"
-
-
-def test_payout_label_paid_out(client):
+def test_status_is_approved_after_approval(client):
     ctx = _setup(client)
     client.post(
         f"/expenses/{ctx['expense_id']}/approve",
         json={"decision_note": None},
         headers=ctx["auditor"]["headers"],
     )
+    expenses = client.get(
+        f"/communities/{ctx['comm_id']}/expenses",
+        headers=ctx["admin"]["headers"],
+    ).json()
+    assert expenses[0]["status"] == "approved"
+
+
+def test_status_is_paid_out_after_mark_paid_out(client):
+    ctx = _setup(client)
     client.post(
-        f"/expenses/{ctx['expense_id']}/mark-disbursed",
-        json={"disbursement_reference": "TXN-001"},
+        f"/expenses/{ctx['expense_id']}/approve",
+        json={"decision_note": None},
+        headers=ctx["auditor"]["headers"],
+    )
+    client.post(
+        f"/expenses/{ctx['expense_id']}/mark-paid-out",
+        json={"payout_reference": "TXN-001"},
         headers=ctx["admin"]["headers"],
     )
     expenses = client.get(
         f"/communities/{ctx['comm_id']}/expenses",
         headers=ctx["admin"]["headers"],
     ).json()
-    assert expenses[0]["payout_label"] == "Paid Out"
+    assert expenses[0]["status"] == "paid_out"
 
 
-# ── mark-disbursed endpoint tests ─────────────────────────────────────────────
+# ── mark-paid-out endpoint tests ──────────────────────────────────────────────
 
-def test_mark_disbursed_requires_approved_status(client):
+def test_mark_paid_out_requires_approved_status(client):
     ctx = _setup(client)
     resp = client.post(
-        f"/expenses/{ctx['expense_id']}/mark-disbursed",
-        json={"disbursement_reference": "TXN-001"},
+        f"/expenses/{ctx['expense_id']}/mark-paid-out",
+        json={"payout_reference": "TXN-001"},
         headers=ctx["admin"]["headers"],
     )
     assert resp.status_code == 409
     assert "approved" in resp.json()["detail"].lower()
 
 
-def test_mark_disbursed_sets_fields(client):
+def test_mark_paid_out_sets_fields(client):
     ctx = _setup(client)
     client.post(
         f"/expenses/{ctx['expense_id']}/approve",
@@ -126,19 +126,21 @@ def test_mark_disbursed_sets_fields(client):
         headers=ctx["auditor"]["headers"],
     )
     resp = client.post(
-        f"/expenses/{ctx['expense_id']}/mark-disbursed",
-        json={"disbursement_reference": "TXN-ABC"},
+        f"/expenses/{ctx['expense_id']}/mark-paid-out",
+        json={"payout_reference": "TXN-ABC"},
         headers=ctx["treasurer"]["headers"],
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["disbursed_at"] is not None
-    assert data["disbursed_by"] == ctx["treasurer"]["id"]
-    assert data["disbursement_reference"] == "TXN-ABC"
-    assert data["payout_label"] == "Paid Out"
+    assert data["status"] == "paid_out"
+    assert data["paid_out_at"] is not None
+    assert data["paid_out_by"] == ctx["treasurer"]["id"]
+    assert data["payout_reference"] == "TXN-ABC"
+    assert data["destination_bank_name"] == "GTBank"
+    assert data["destination_account_number"] == "0123456789"
 
 
-def test_mark_disbursed_rejects_if_already_disbursed(client):
+def test_mark_paid_out_rejects_if_already_paid_out(client):
     ctx = _setup(client)
     client.post(
         f"/expenses/{ctx['expense_id']}/approve",
@@ -146,20 +148,19 @@ def test_mark_disbursed_rejects_if_already_disbursed(client):
         headers=ctx["auditor"]["headers"],
     )
     client.post(
-        f"/expenses/{ctx['expense_id']}/mark-disbursed",
-        json={"disbursement_reference": "TXN-001"},
+        f"/expenses/{ctx['expense_id']}/mark-paid-out",
+        json={"payout_reference": "TXN-001"},
         headers=ctx["admin"]["headers"],
     )
     resp = client.post(
-        f"/expenses/{ctx['expense_id']}/mark-disbursed",
-        json={"disbursement_reference": "TXN-002"},
+        f"/expenses/{ctx['expense_id']}/mark-paid-out",
+        json={"payout_reference": "TXN-002"},
         headers=ctx["admin"]["headers"],
     )
     assert resp.status_code == 409
-    assert "already" in resp.json()["detail"].lower()
 
 
-def test_mark_disbursed_forbidden_for_regular_member(client):
+def test_mark_paid_out_forbidden_for_regular_member(client):
     ctx = _setup(client)
     member = _make_user(client, "member@dis.com", "Member")
     client.post(
@@ -176,14 +177,14 @@ def test_mark_disbursed_forbidden_for_regular_member(client):
         headers=ctx["auditor"]["headers"],
     )
     resp = client.post(
-        f"/expenses/{ctx['expense_id']}/mark-disbursed",
-        json={"disbursement_reference": "TXN-HACK"},
+        f"/expenses/{ctx['expense_id']}/mark-paid-out",
+        json={"payout_reference": "TXN-HACK"},
         headers=member["headers"],
     )
     assert resp.status_code == 403
 
 
-# ── transparency report payout_label tests ────────────────────────────────────
+# ── transparency report status tests ─────────────────────────────────────────
 
 def _create_collection(client, comm_id, admin_headers):
     return client.post(
@@ -193,12 +194,11 @@ def _create_collection(client, comm_id, admin_headers):
     ).json()
 
 
-def test_transparency_shows_correct_payout_labels(client):
+def test_transparency_shows_correct_statuses(client):
     ctx = _setup(client)
     col = _create_collection(client, ctx["comm_id"], ctx["admin"]["headers"])
     col_id = col["id"]
 
-    # Link the expense to the collection
     exp_resp = client.post(
         f"/communities/{ctx['comm_id']}/expenses",
         json={
@@ -214,20 +214,20 @@ def test_transparency_shows_correct_payout_labels(client):
     # Stage 1: pending
     report = client.get(f"/collections/{col_id}/transparency").json()
     exp = next(e for e in report["expenses"] if e["title"] == "Linked Expense")
-    assert exp["payout_label"] == "Pending Approval"
+    assert exp["status"] == "pending"
 
     # Stage 2: approved
     client.post(f"/expenses/{exp_id}/approve", json={}, headers=ctx["auditor"]["headers"])
     report = client.get(f"/collections/{col_id}/transparency").json()
     exp = next(e for e in report["expenses"] if e["title"] == "Linked Expense")
-    assert exp["payout_label"] == "Approved — Payout Pending"
+    assert exp["status"] == "approved"
 
-    # Stage 3: disbursed
+    # Stage 3: paid_out
     client.post(
-        f"/expenses/{exp_id}/mark-disbursed",
-        json={"disbursement_reference": "REF-001"},
+        f"/expenses/{exp_id}/mark-paid-out",
+        json={"payout_reference": "REF-001"},
         headers=ctx["admin"]["headers"],
     )
     report = client.get(f"/collections/{col_id}/transparency").json()
     exp = next(e for e in report["expenses"] if e["title"] == "Linked Expense")
-    assert exp["payout_label"] == "Paid Out"
+    assert exp["status"] == "paid_out"

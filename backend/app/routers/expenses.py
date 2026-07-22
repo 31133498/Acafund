@@ -40,20 +40,8 @@ class RejectIn(BaseModel):
     decision_note: str
 
 
-class MarkDisbursedIn(BaseModel):
-    disbursement_reference: Optional[str] = None
-
-
-def _payout_label(expense: Expense) -> str:
-    if expense.status == ExpenseStatus.PENDING:
-        return "Pending Approval"
-    if expense.status == ExpenseStatus.REJECTED:
-        return "Rejected"
-    if expense.status == ExpenseStatus.APPROVED:
-        if expense.disbursed_at:
-            return "Paid Out"
-        return "Approved — Payout Pending"
-    return expense.status.value
+class MarkPaidOutIn(BaseModel):
+    payout_reference: str
 
 
 class ExpenseOut(BaseModel):
@@ -73,17 +61,10 @@ class ExpenseOut(BaseModel):
     destination_bank_name: Optional[str] = None
     destination_account_number: Optional[str] = None
     destination_account_name: Optional[str] = None
-    disbursed_at: Optional[datetime] = None
-    disbursed_by: Optional[int] = None
-    disbursement_reference: Optional[str] = None
-    payout_label: str = "Pending Approval"
+    payout_reference: Optional[str] = None
+    paid_out_at: Optional[datetime] = None
+    paid_out_by: Optional[int] = None
     model_config = {"from_attributes": True}
-
-    @classmethod
-    def from_orm_with_label(cls, expense: Expense) -> "ExpenseOut":
-        obj = cls.model_validate(expense)
-        obj.payout_label = _payout_label(expense)
-        return obj
 
 
 class LedgerEntryOut(BaseModel):
@@ -166,7 +147,7 @@ def create_expense(
     db.add(expense)
     db.commit()
     db.refresh(expense)
-    return ExpenseOut.from_orm_with_label(expense)
+    return ExpenseOut.model_validate(expense)
 
 
 @router.post("/expenses/{expense_id}/approve", response_model=ExpenseOut)
@@ -191,17 +172,9 @@ def approve_expense(
     expense.approved_by = current_user.id
     expense.decision_note = body.decision_note
     expense.decided_at = datetime.now(timezone.utc)
-
-    record_debit(
-        db=db,
-        community_id=expense.community_id,
-        amount=expense.amount,
-        reference_type="expense",
-        reference_id=expense.id,
-        description=f"Expense: {expense.title}",
-    )
+    db.commit()
     db.refresh(expense)
-    return ExpenseOut.from_orm_with_label(expense)
+    return ExpenseOut.model_validate(expense)
 
 
 @router.post("/expenses/{expense_id}/reject", response_model=ExpenseOut)
@@ -225,13 +198,13 @@ def reject_expense(
     expense.decided_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(expense)
-    return ExpenseOut.from_orm_with_label(expense)
+    return ExpenseOut.model_validate(expense)
 
 
-@router.post("/expenses/{expense_id}/mark-disbursed", response_model=ExpenseOut)
-def mark_disbursed(
+@router.post("/expenses/{expense_id}/mark-paid-out", response_model=ExpenseOut)
+def mark_paid_out(
     expense_id: int,
-    body: MarkDisbursedIn,
+    body: MarkPaidOutIn,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -244,20 +217,27 @@ def mark_disbursed(
     if expense.status != ExpenseStatus.APPROVED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Expense must be approved before marking as disbursed",
-        )
-    if expense.disbursed_at is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Expense already marked as disbursed",
+            detail="Expense must be approved before marking as paid out",
         )
 
-    expense.disbursed_at = datetime.now(timezone.utc)
-    expense.disbursed_by = current_user.id
-    expense.disbursement_reference = body.disbursement_reference
-    db.commit()
+    if not body.payout_reference:
+        raise HTTPException(status_code=400, detail="payout_reference is required")
+
+    expense.status = ExpenseStatus.PAID_OUT
+    expense.paid_out_at = datetime.now(timezone.utc)
+    expense.paid_out_by = current_user.id
+    expense.payout_reference = body.payout_reference
+
+    record_debit(
+        db=db,
+        community_id=expense.community_id,
+        amount=expense.amount,
+        reference_type="expense",
+        reference_id=expense.id,
+        description=f"Expense paid out: {expense.title} (ref: {body.payout_reference})",
+    )
     db.refresh(expense)
-    return ExpenseOut.from_orm_with_label(expense)
+    return ExpenseOut.model_validate(expense)
 
 
 @router.get("/communities/{community_id}/expenses", response_model=List[ExpenseOut])
@@ -271,7 +251,7 @@ def list_expenses(
     if expense_status is not None:
         q = q.filter(Expense.status == expense_status)
     expenses = q.order_by(Expense.created_at.desc()).all()
-    return [ExpenseOut.from_orm_with_label(e) for e in expenses]
+    return [ExpenseOut.model_validate(e) for e in expenses]
 
 
 @router.get("/communities/{community_id}/ledger", response_model=LedgerPageOut)

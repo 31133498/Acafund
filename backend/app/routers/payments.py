@@ -219,10 +219,10 @@ async def monnify_webhook(request: Request, db: Session = Depends(get_db)):
     account_reference = product.get("reference", "")
     amount_paid = float(event_data.get("amountPaid") or payload.get("amountPaid") or 0)
 
-    if account_reference.startswith("acafund-community-"):
+    if account_reference.startswith("acafund-comm-"):
         community = (
             db.query(Community)
-            .filter(Community.monnify_account_reference == account_reference)
+            .filter(Community.reserved_account_reference == account_reference)
             .first()
         )
         if community and amount_paid > 0:

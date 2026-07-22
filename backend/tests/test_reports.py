@@ -113,17 +113,19 @@ def test_dashboard_numbers_match_ledger_state(client, db_session):
         ))
     db_session.commit()
 
-    # Create and approve an expense → one debit (800)
+    # Create, approve, and mark-paid-out an expense → one debit (800)
     exp_resp = client.post(
         f"/communities/{s['comm']['id']}/expenses",
         json={"title": "Stationery", "amount": 800.0, "category": "Ops"},
         headers=s["treasurer"]["headers"],
     )
     assert exp_resp.status_code == 201
+    exp_id = exp_resp.json()["id"]
+    client.post(f"/expenses/{exp_id}/approve", json={}, headers=s["auditor"]["headers"])
     client.post(
-        f"/expenses/{exp_resp.json()['id']}/approve",
-        json={},
-        headers=s["auditor"]["headers"],
+        f"/expenses/{exp_id}/mark-paid-out",
+        json={"payout_reference": "TXN-STMT"},
+        headers=s["admin"]["headers"],
     )
 
     # Create one active collection (m1 is enrolled, pending)

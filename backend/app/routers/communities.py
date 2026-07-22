@@ -1,4 +1,3 @@
-import logging
 import secrets
 from typing import List, Optional
 
@@ -13,8 +12,6 @@ from app.models.community import Community, CommunityMember
 from app.models.enums import MemberRole
 from app.models.user import User  # noqa: F401
 from app.services.monnify import MonnifyError, monnify_service
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/communities", tags=["communities"])
 
@@ -34,10 +31,15 @@ class ChangeRoleIn(BaseModel):
     new_role: MemberRole
 
 
+class SetupReservedAccountIn(BaseModel):
+    bvn: str
+
+
 class ReservedAccountOut(BaseModel):
-    account_number: Optional[str] = None
-    bank_name: Optional[str] = None
-    account_name: Optional[str] = None
+    bank_name: str
+    account_number: str
+    account_name: str
+    status: str
 
 
 class CommunityOut(BaseModel):
@@ -46,9 +48,6 @@ class CommunityOut(BaseModel):
     description: Optional[str]
     invite_code: str
     created_by: int
-    monnify_account_number: Optional[str] = None
-    monnify_bank_name: Optional[str] = None
-    monnify_account_name: Optional[str] = None
     model_config = {"from_attributes": True}
 
 
@@ -74,27 +73,8 @@ def _unique_invite_code(db: Session) -> str:
             return code
 
 
-async def _try_reserve_account(community: Community, current_user: User, db: Session) -> None:
-    """Best-effort Monnify reserved-account call. Failures are logged, never raised."""
-    try:
-        result = await monnify_service.reserve_account(
-            account_reference=f"acafund-community-{community.id}",
-            account_name=community.name,
-            customer_email=current_user.email,
-            customer_name=community.name,
-        )
-        community.monnify_account_reference = f"acafund-community-{community.id}"
-        community.monnify_account_number = result["account_number"]
-        community.monnify_bank_name = result["bank_name"]
-        community.monnify_account_name = result["account_name"]
-        db.commit()
-        db.refresh(community)
-    except Exception as exc:
-        logger.warning("reserve_account failed for community %s: %s", community.id, exc)
-
-
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=CommunityOut)
-async def create_community(
+def create_community(
     body: CreateCommunityIn,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -110,8 +90,6 @@ async def create_community(
     db.add(CommunityMember(community_id=community.id, user_id=current_user.id, role=MemberRole.ADMIN))
     db.commit()
     db.refresh(community)
-
-    await _try_reserve_account(community, current_user, db)
     return community
 
 
@@ -150,44 +128,77 @@ def get_community(
     return community
 
 
-@router.post("/{community_id}/reserved-account/setup", response_model=ReservedAccountOut)
-async def setup_reserved_account(
+@router.get("/{community_id}/reserved-account", response_model=Optional[ReservedAccountOut])
+def get_reserved_account(
     community_id: int,
-    _: CommunityMember = Depends(require_community_role([MemberRole.ADMIN])),
-    current_user: User = Depends(get_current_user),
+    _: CommunityMember = Depends(require_community_role(ALL_ROLES)),
     db: Session = Depends(get_db),
 ):
     community = db.query(Community).filter(Community.id == community_id).first()
     if not community:
         raise HTTPException(status_code=404, detail="Community not found")
+    if not community.reserved_account_number:
+        return None
+    return ReservedAccountOut(
+        bank_name=community.reserved_bank_name or "",
+        account_number=community.reserved_account_number,
+        account_name=community.reserved_account_name or "",
+        status=community.reserved_account_status or "active",
+    )
 
-    if community.monnify_account_number:
+
+@router.post("/{community_id}/reserved-account", response_model=ReservedAccountOut)
+async def setup_reserved_account(
+    community_id: int,
+    body: SetupReservedAccountIn,
+    _: CommunityMember = Depends(require_community_role([MemberRole.ADMIN])),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not body.bvn:
+        raise HTTPException(status_code=400, detail="BVN is required to create a reserved account")
+
+    community = db.query(Community).filter(Community.id == community_id).first()
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
+
+    if community.reserved_account_number and community.reserved_account_status == "active":
         return ReservedAccountOut(
-            account_number=community.monnify_account_number,
-            bank_name=community.monnify_bank_name,
-            account_name=community.monnify_account_name,
+            bank_name=community.reserved_bank_name or "",
+            account_number=community.reserved_account_number,
+            account_name=community.reserved_account_name or "",
+            status="active",
         )
 
     try:
-        result = await monnify_service.reserve_account(
-            account_reference=f"acafund-community-{community.id}",
-            account_name=community.name,
-            customer_email=current_user.email,
-            customer_name=community.name,
+        result = await monnify_service.create_reserved_account(
+            community_id=community.id,
+            community_name=community.name,
+            admin_name=current_user.full_name or current_user.email,
+            bvn=body.bvn,
         )
     except MonnifyError as exc:
-        raise HTTPException(status_code=502, detail=f"Payment gateway error: {exc.message}")
+        community.reserved_account_status = "failed"
+        db.commit()
+        return ReservedAccountOut(
+            bank_name="",
+            account_number="",
+            account_name="",
+            status="failed",
+        )
 
-    community.monnify_account_reference = f"acafund-community-{community.id}"
-    community.monnify_account_number = result["account_number"]
-    community.monnify_bank_name = result["bank_name"]
-    community.monnify_account_name = result["account_name"]
+    community.reserved_account_reference = f"acafund-comm-{community.id}"
+    community.reserved_account_number = result["account_number"]
+    community.reserved_bank_name = result["bank_name"]
+    community.reserved_account_name = result["account_name"]
+    community.reserved_account_status = result["status"]
     db.commit()
 
     return ReservedAccountOut(
-        account_number=community.monnify_account_number,
-        bank_name=community.monnify_bank_name,
-        account_name=community.monnify_account_name,
+        bank_name=community.reserved_bank_name or "",
+        account_number=community.reserved_account_number,
+        account_name=community.reserved_account_name or "",
+        status=community.reserved_account_status,
     )
 
 
