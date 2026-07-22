@@ -175,12 +175,13 @@ def test_assistant_context_contains_correct_balance(client, db_session):
     ))
     db_session.commit()
 
-    with respx.mock:
-        anthropic_route = respx.post("https://api.anthropic.com/v1/messages").mock(
+    with respx.mock as m:
+        # Assistant service calls NVIDIA, not Anthropic directly
+        nvidia_route = m.post("https://integrate.api.nvidia.com/v1/chat/completions").mock(
             return_value=httpx.Response(200, json={
-                "content": [{"type": "text", "text": "The balance is 5000.0 NGN."}],
-                "model": "claude-sonnet-4-6",
-                "usage": {"input_tokens": 120, "output_tokens": 20},
+                "choices": [{"message": {"content": "The balance is 5000.0 NGN."}}],
+                "model": "nvidia/llama-3.1-nemotron-70b-instruct",
+                "usage": {"prompt_tokens": 120, "completion_tokens": 20},
             })
         )
 
@@ -193,10 +194,10 @@ def test_assistant_context_contains_correct_balance(client, db_session):
     assert resp.status_code == 200
     assert resp.json()["answer"] == "The balance is 5000.0 NGN."
 
-    # Inspect what was sent to Anthropic — context must contain the correct balance
-    assert anthropic_route.called
-    sent = json.loads(anthropic_route.calls[0].request.content)
-    assert sent["model"] == "claude-sonnet-4-6"
-    user_content = sent["messages"][0]["content"]
+    # Inspect what was sent to NVIDIA — context must contain the correct balance
+    assert nvidia_route.called
+    sent = json.loads(nvidia_route.calls[0].request.content)
+    assert sent["model"] == "nvidia/llama-3.1-nemotron-70b-instruct"
+    user_content = sent["messages"][1]["content"]
     # The balance (5000.0) should appear in the serialised context
     assert "5000.0" in user_content

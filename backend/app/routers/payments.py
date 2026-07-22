@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
@@ -13,11 +14,13 @@ from app.config import settings
 from app.core.security import get_current_user
 from app.database import get_db
 from app.models.collection import Collection, CollectionMember
-from app.models.community import CommunityMember
+from app.models.community import Community, CommunityMember
 from app.models.enums import CollectionStatus, MemberPaymentStatus, MemberRole, PaymentStatus
 from app.models.payment import Payment
-from app.services.ledger import record_credit
+from app.services.ledger import record_credit, record_direct_credit
 from app.services.monnify import MonnifyError, monnify_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["payments"])
 
@@ -188,34 +191,55 @@ async def monnify_webhook(request: Request, db: Session = Depends(get_db)):
     except (json.JSONDecodeError, UnicodeDecodeError):
         return {"status": "invalid_json"}
 
-    payment_reference = payload.get("paymentReference")
-    if not payment_reference:
-        return {"status": "ignored"}
+    # Support both flat webhook shape and eventData-wrapped shape
+    event_data = payload.get("eventData", payload)
+    payment_reference = event_data.get("paymentReference") or payload.get("paymentReference")
 
-    payment = (
-        db.query(Payment)
-        .filter(Payment.payment_reference == payment_reference)
-        .first()
-    )
-    if not payment:
-        return {"status": "not_found"}
+    if payment_reference:
+        payment = (
+            db.query(Payment)
+            .filter(Payment.payment_reference == payment_reference)
+            .first()
+        )
+        if payment:
+            if payment.status == PaymentStatus.PAID:
+                return {"status": "already_paid"}
+            try:
+                verification = await monnify_service.verify_transaction(payment_reference)
+            except MonnifyError:
+                return {"status": "verification_failed"}
+            payment_status_str = verification.get("paymentStatus", "")
+            amount_paid = float(verification.get("amountPaid", 0))
+            if payment_status_str in ("PAID", "OVERPAID") and amount_paid >= payment.amount:
+                _reconcile_payment(payment, verification, db)
+            return {"status": "ok"}
 
-    # Idempotency — never process the same payment twice
-    if payment.status == PaymentStatus.PAID:
-        return {"status": "already_paid"}
+    # No matching Payment row — check for reserved-account direct transfer
+    product = event_data.get("product", payload.get("product", {}))
+    account_reference = product.get("reference", "")
+    amount_paid = float(event_data.get("amountPaid") or payload.get("amountPaid") or 0)
 
-    try:
-        verification = await monnify_service.verify_transaction(payment_reference)
-    except MonnifyError:
-        return {"status": "verification_failed"}
+    if account_reference.startswith("acafund-community-"):
+        community = (
+            db.query(Community)
+            .filter(Community.monnify_account_reference == account_reference)
+            .first()
+        )
+        if community and amount_paid > 0:
+            record_direct_credit(
+                db=db,
+                community_id=community.id,
+                amount=amount_paid,
+                reference_type="reserved_account_transfer",
+                reference_id=community.id,
+                description=f"Direct transfer via reserved account ({account_reference})",
+                raw_payload=payload,
+            )
+            return {"status": "reserved_account_credit_recorded"}
+        logger.warning("reserved account ref %s not matched to any community", account_reference)
 
-    payment_status_str = verification.get("paymentStatus", "")
-    amount_paid = float(verification.get("amountPaid", 0))
-
-    if payment_status_str in ("PAID", "OVERPAID") and amount_paid >= payment.amount:
-        _reconcile_payment(payment, verification, db)
-
-    return {"status": "ok"}
+    logger.info("webhook ignored — no matching payment or account reference")
+    return {"status": "ignored"}
 
 
 @router.post("/payments/{payment_id}/sync")

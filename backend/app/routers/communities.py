@@ -1,3 +1,4 @@
+import logging
 import secrets
 from typing import List, Optional
 
@@ -10,7 +11,10 @@ from app.core.security import get_current_user
 from app.database import get_db
 from app.models.community import Community, CommunityMember
 from app.models.enums import MemberRole
-from app.models.user import User  # noqa: F401 (imported for the join)
+from app.models.user import User  # noqa: F401
+from app.services.monnify import MonnifyError, monnify_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/communities", tags=["communities"])
 
@@ -30,12 +34,21 @@ class ChangeRoleIn(BaseModel):
     new_role: MemberRole
 
 
+class ReservedAccountOut(BaseModel):
+    account_number: Optional[str] = None
+    bank_name: Optional[str] = None
+    account_name: Optional[str] = None
+
+
 class CommunityOut(BaseModel):
     id: int
     name: str
     description: Optional[str]
     invite_code: str
     created_by: int
+    monnify_account_number: Optional[str] = None
+    monnify_bank_name: Optional[str] = None
+    monnify_account_name: Optional[str] = None
     model_config = {"from_attributes": True}
 
 
@@ -61,8 +74,27 @@ def _unique_invite_code(db: Session) -> str:
             return code
 
 
+async def _try_reserve_account(community: Community, current_user: User, db: Session) -> None:
+    """Best-effort Monnify reserved-account call. Failures are logged, never raised."""
+    try:
+        result = await monnify_service.reserve_account(
+            account_reference=f"acafund-community-{community.id}",
+            account_name=community.name,
+            customer_email=current_user.email,
+            customer_name=community.name,
+        )
+        community.monnify_account_reference = f"acafund-community-{community.id}"
+        community.monnify_account_number = result["account_number"]
+        community.monnify_bank_name = result["bank_name"]
+        community.monnify_account_name = result["account_name"]
+        db.commit()
+        db.refresh(community)
+    except Exception as exc:
+        logger.warning("reserve_account failed for community %s: %s", community.id, exc)
+
+
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=CommunityOut)
-def create_community(
+async def create_community(
     body: CreateCommunityIn,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -78,6 +110,8 @@ def create_community(
     db.add(CommunityMember(community_id=community.id, user_id=current_user.id, role=MemberRole.ADMIN))
     db.commit()
     db.refresh(community)
+
+    await _try_reserve_account(community, current_user, db)
     return community
 
 
@@ -114,6 +148,47 @@ def get_community(
     if not community:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Community not found")
     return community
+
+
+@router.post("/{community_id}/reserved-account/setup", response_model=ReservedAccountOut)
+async def setup_reserved_account(
+    community_id: int,
+    _: CommunityMember = Depends(require_community_role([MemberRole.ADMIN])),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    community = db.query(Community).filter(Community.id == community_id).first()
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
+
+    if community.monnify_account_number:
+        return ReservedAccountOut(
+            account_number=community.monnify_account_number,
+            bank_name=community.monnify_bank_name,
+            account_name=community.monnify_account_name,
+        )
+
+    try:
+        result = await monnify_service.reserve_account(
+            account_reference=f"acafund-community-{community.id}",
+            account_name=community.name,
+            customer_email=current_user.email,
+            customer_name=community.name,
+        )
+    except MonnifyError as exc:
+        raise HTTPException(status_code=502, detail=f"Payment gateway error: {exc.message}")
+
+    community.monnify_account_reference = f"acafund-community-{community.id}"
+    community.monnify_account_number = result["account_number"]
+    community.monnify_bank_name = result["bank_name"]
+    community.monnify_account_name = result["account_name"]
+    db.commit()
+
+    return ReservedAccountOut(
+        account_number=community.monnify_account_number,
+        bank_name=community.monnify_bank_name,
+        account_name=community.monnify_account_name,
+    )
 
 
 @router.get("/{community_id}/members", response_model=List[MemberOut])

@@ -72,6 +72,43 @@ class MonnifyService:
             raise MonnifyError(resp.status_code, resp.text)
         return resp.json()["responseBody"]
 
+    async def reserve_account(
+        self,
+        account_reference: str,
+        account_name: str,
+        customer_email: str,
+        customer_name: str,
+    ) -> dict:
+        """Reserve a dedicated bank account for a community.
+
+        Returns dict with keys: account_number, bank_name, account_name.
+        """
+        token = await self._get_access_token()
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{settings.monnify_base_url}/api/v2/bank-transfer/reserved-accounts",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "accountReference": account_reference,
+                    "accountName": account_name,
+                    "currencyCode": "NGN",
+                    "contractCode": settings.monnify_contract_code,
+                    "customerEmail": customer_email,
+                    "customerName": customer_name,
+                    "getAllAvailableBanks": False,
+                },
+            )
+        if resp.status_code != 200:
+            raise MonnifyError(resp.status_code, resp.text)
+        body = resp.json()["responseBody"]
+        accounts = body.get("accounts", [])
+        first = accounts[0] if accounts else {}
+        return {
+            "account_number": first.get("accountNumber", ""),
+            "bank_name": first.get("bankName", ""),
+            "account_name": body.get("accountName", account_name),
+        }
+
     async def verify_transaction(self, payment_reference: str) -> dict:
         token = await self._get_access_token()
         async with httpx.AsyncClient() as client:

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import require_community_role
 from app.database import get_db
 from app.models.collection import Collection, CollectionMember
-from app.models.community import CommunityMember
+from app.models.community import Community, CommunityMember
 from app.models.enums import (
     CollectionStatus,
     ExpenseStatus,
@@ -32,6 +32,13 @@ class ExpensePublicOut(BaseModel):
     amount: float
     category: str
     status: ExpenseStatus
+    payout_label: str
+
+
+class DirectTransferInfo(BaseModel):
+    account_number: str
+    bank_name: Optional[str] = None
+    account_name: Optional[str] = None
 
 
 class TransparencyOut(BaseModel):
@@ -44,6 +51,7 @@ class TransparencyOut(BaseModel):
     pending_count: int
     waived_count: int
     budget_allocation: Optional[dict] = None
+    direct_transfer: Optional[DirectTransferInfo] = None
     expenses: List[ExpensePublicOut]
 
 
@@ -74,6 +82,18 @@ class DashboardOut(BaseModel):
     recent_ledger: List[LedgerEntryOut]
 
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _expense_payout_label(expense: Expense) -> str:
+    if expense.status == ExpenseStatus.PENDING:
+        return "Pending Approval"
+    if expense.status == ExpenseStatus.REJECTED:
+        return "Rejected"
+    if expense.status == ExpenseStatus.APPROVED:
+        return "Paid Out" if expense.disbursed_at else "Approved — Payout Pending"
+    return expense.status.value
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.get("/collections/{collection_id}/transparency", response_model=TransparencyOut)
@@ -100,6 +120,15 @@ def get_transparency(
         .all()
     )
 
+    community = db.query(Community).filter(Community.id == col.community_id).first()
+    direct_transfer = None
+    if community and community.monnify_account_number:
+        direct_transfer = DirectTransferInfo(
+            account_number=community.monnify_account_number,
+            bank_name=community.monnify_bank_name,
+            account_name=community.monnify_account_name,
+        )
+
     return TransparencyOut(
         id=col.id,
         title=col.title,
@@ -110,12 +139,14 @@ def get_transparency(
         pending_count=len(pending),
         waived_count=len(waived),
         budget_allocation=col.budget_allocation,
+        direct_transfer=direct_transfer,
         expenses=[
             ExpensePublicOut(
                 title=e.title,
                 amount=e.amount,
                 category=e.category,
                 status=e.status,
+                payout_label=_expense_payout_label(e),
             )
             for e in expenses
         ],

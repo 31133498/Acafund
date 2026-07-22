@@ -17,6 +17,12 @@ class Community(Base):
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
+    # Monnify reserved account (set after community creation)
+    monnify_account_reference = Column(String, nullable=True)
+    monnify_account_number = Column(String, nullable=True)
+    monnify_bank_name = Column(String, nullable=True)
+    monnify_account_name = Column(String, nullable=True)
+
     creator = relationship("User", foreign_keys=[created_by])
     members = relationship("CommunityMember", back_populates="community")
 
