@@ -2,7 +2,7 @@ import type {
   TokenResponse, User, Community, CommunityMember, Collection,
   CollectionDetail, CollectionDashboard, CollectionMemberEntry,
   CommunityDashboard, Expense, LedgerResponse, TransparencyReport,
-  MemberRole, ActiveCollectionSummary, ReservedAccount,
+  MemberRole, ReservedAccount,
 } from './types'
 
 const BASE_URL = 'https://acafund-1.onrender.com'
