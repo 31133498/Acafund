@@ -15,6 +15,7 @@ build/
 .env
 .env.*
 !.env.example
+!frontend/.env.production
 
 # Node
 node_modules/
