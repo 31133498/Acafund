@@ -22,55 +22,65 @@ CORS_HEADERS = {
 }
 
 
+def _col_exists(conn, table: str, column: str) -> bool:
+    row = conn.execute(text(
+        "SELECT 1 FROM information_schema.columns "
+        "WHERE table_name=:t AND column_name=:c"
+    ), {"t": table, "c": column}).first()
+    return row is not None
+
+
 def _migrate(engine):
-    """Rename legacy columns that were deployed under old names."""
+    """Idempotent schema migration — renames legacy columns and adds missing ones."""
+    import logging
+    log = logging.getLogger("acafund.migrate")
+    log.info("Running startup migrations...")
+
     with engine.begin() as conn:
-        # communities: monnify_* → reserved_*
+        # communities: rename monnify_* → reserved_*
         for old, new in [
             ("monnify_account_reference", "reserved_account_reference"),
             ("monnify_account_number",    "reserved_account_number"),
             ("monnify_bank_name",         "reserved_bank_name"),
             ("monnify_account_name",      "reserved_account_name"),
         ]:
-            conn.execute(text(f"""
-                DO $$ BEGIN
-                    IF EXISTS (
-                        SELECT 1 FROM information_schema.columns
-                        WHERE table_name='communities' AND column_name='{old}'
-                    ) THEN
-                        ALTER TABLE communities RENAME COLUMN {old} TO {new};
-                    END IF;
-                END $$;
-            """))
+            if _col_exists(conn, "communities", old):
+                conn.execute(text(f"ALTER TABLE communities RENAME COLUMN {old} TO {new}"))
+                log.info("communities: renamed %s → %s", old, new)
 
-        # communities: add reserved_account_status if missing
-        conn.execute(text("""
-            DO $$ BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM information_schema.columns
-                    WHERE table_name='communities' AND column_name='reserved_account_status'
-                ) THEN
-                    ALTER TABLE communities ADD COLUMN reserved_account_status VARCHAR;
-                END IF;
-            END $$;
-        """))
+        # communities: add columns that may be missing entirely
+        for col, typedef in [
+            ("reserved_account_reference", "VARCHAR"),
+            ("reserved_account_number",    "VARCHAR"),
+            ("reserved_bank_name",         "VARCHAR"),
+            ("reserved_account_name",      "VARCHAR"),
+            ("reserved_account_status",    "VARCHAR"),
+        ]:
+            if not _col_exists(conn, "communities", col):
+                conn.execute(text(f"ALTER TABLE communities ADD COLUMN {col} VARCHAR"))
+                log.info("communities: added missing column %s", col)
 
-        # expenses: disbursed_* → paid_out_* / payout_reference
+        # expenses: rename disbursed_* → paid_out_* / payout_reference
         for old, new in [
             ("disbursed_at",           "paid_out_at"),
             ("disbursed_by",           "paid_out_by"),
             ("disbursement_reference", "payout_reference"),
         ]:
-            conn.execute(text(f"""
-                DO $$ BEGIN
-                    IF EXISTS (
-                        SELECT 1 FROM information_schema.columns
-                        WHERE table_name='expenses' AND column_name='{old}'
-                    ) THEN
-                        ALTER TABLE expenses RENAME COLUMN {old} TO {new};
-                    END IF;
-                END $$;
-            """))
+            if _col_exists(conn, "expenses", old):
+                conn.execute(text(f"ALTER TABLE expenses RENAME COLUMN {old} TO {new}"))
+                log.info("expenses: renamed %s → %s", old, new)
+
+        # expenses: add columns that may be missing entirely
+        for col, typedef in [
+            ("payout_reference", "VARCHAR"),
+            ("paid_out_at",      "TIMESTAMP WITH TIME ZONE"),
+            ("paid_out_by",      "INTEGER"),
+        ]:
+            if not _col_exists(conn, "expenses", col):
+                conn.execute(text(f"ALTER TABLE expenses ADD COLUMN {col} {typedef}"))
+                log.info("expenses: added missing column %s", col)
+
+    log.info("Migrations complete.")
 
 
 @asynccontextmanager
