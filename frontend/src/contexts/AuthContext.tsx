@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { logout as apiLogout, hasToken } from '../lib/api'
+import { logout as apiLogout, hasToken, getMe } from '../lib/api'
 import type { User } from '../lib/types'
 
 interface AuthContextValue {
@@ -11,17 +11,14 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
-// Placeholder user used when a token exists but the backend is unreachable.
-// Replaced by real data once the backend is live and getMe() works.
-const PLACEHOLDER_USER: User = {
-  id: 0,
-  full_name: 'You',
-  email: '',
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+
+  const logout = () => {
+    apiLogout()
+    setUser(null)
+  }
 
   const refresh = async () => {
     if (!hasToken()) {
@@ -30,21 +27,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
     try {
-      // Try the real endpoint; fall back to placeholder if backend is unreachable
-      const { getMe } = await import('../lib/api')
       const me = await getMe()
       setUser(me)
     } catch {
-      // Backend down — treat the stored token as valid so navigation works
-      setUser(PLACEHOLDER_USER)
+      // Token is invalid or expired — clear it and require re-login
+      logout()
     } finally {
       setLoading(false)
     }
-  }
-
-  const logout = () => {
-    apiLogout()
-    setUser(null)
   }
 
   useEffect(() => { refresh() }, [])

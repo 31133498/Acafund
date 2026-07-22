@@ -1,8 +1,8 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.database import Base, engine
@@ -14,6 +14,12 @@ import app.models.payment  # noqa: F401
 import app.models.ledger  # noqa: F401
 import app.models.expense  # noqa: F401
 
+CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "*",
+}
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -23,7 +29,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
 
-# Broad CORS middleware — covers normal responses
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -33,25 +38,27 @@ app.add_middleware(
 )
 
 
-# Raw middleware that stamps CORS headers on EVERY response (including 4xx/5xx)
-# so the browser never misreads a backend error as a CORS block.
-@app.middleware("http")
-async def force_cors(request: Request, call_next):
-    if request.method == "OPTIONS":
-        return Response(
-            status_code=200,
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Max-Age": "86400",
-            },
-        )
-    response = await call_next(request)
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "*"
-    return response
+# Explicit exception handlers stamp CORS headers directly on error responses
+# so the browser never sees a headerless 4xx/5xx as a CORS block.
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    headers = dict(CORS_HEADERS)
+    if exc.headers:
+        headers.update(exc.headers)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=headers,
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+        headers=CORS_HEADERS,
+    )
 
 from app.routers.auth import router as auth_router
 from app.routers.communities import router as communities_router
