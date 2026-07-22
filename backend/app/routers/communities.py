@@ -56,7 +56,7 @@ class JoinOut(BaseModel):
 
 def _unique_invite_code(db: Session) -> str:
     while True:
-        code = secrets.token_urlsafe(6)[:8]
+        code = secrets.token_urlsafe(6)[:8].lower()
         if not db.query(Community).filter(Community.invite_code == code).first():
             return code
 
@@ -87,7 +87,9 @@ def join_community(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    community = db.query(Community).filter(Community.invite_code == body.invite_code).first()
+    community = db.query(Community).filter(
+        Community.invite_code == body.invite_code.strip().lower()
+    ).first()
     if not community:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid invite code")
 
