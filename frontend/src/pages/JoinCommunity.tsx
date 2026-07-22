@@ -53,7 +53,7 @@ export default function JoinCommunity() {
             label="Invite Code"
             placeholder="e.g. aB3xY9kL"
             value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            onChange={(e) => setCode(e.target.value)}
             className="text-center text-[22px] tracking-[0.2em] font-bold"
           />
           <Button type="submit" loading={loading} fullWidth size="lg">
