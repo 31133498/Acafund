@@ -14,9 +14,10 @@ _SYSTEM_PROMPT = """\
 You are a treasury assistant for an AcaFund community savings group.
 Answer questions ONLY from the financial context provided. If the context
 does not contain enough information to answer, say so explicitly — never
-guess or invent a number."""
+guess or invent a number. Be concise and direct."""
 
-ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
+MODEL = "nvidia/llama-3.1-nemotron-70b-instruct"
 
 
 def _build_context(db: Session, community_id: int) -> dict:
@@ -100,21 +101,23 @@ async def ask_treasury_assistant(db: Session, community_id: int, question: str) 
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.post(
-            ANTHROPIC_URL,
+            NVIDIA_URL,
             headers={
-                "x-api-key": settings.anthropic_api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
+                "Authorization": f"Bearer {settings.nvidia_api_key}",
+                "Content-Type": "application/json",
             },
             json={
-                "model": "claude-sonnet-4-6",
+                "model": MODEL,
+                "messages": [
+                    {"role": "system", "content": _SYSTEM_PROMPT},
+                    {"role": "user", "content": user_content},
+                ],
                 "max_tokens": 1024,
-                "system": _SYSTEM_PROMPT,
-                "messages": [{"role": "user", "content": user_content}],
+                "temperature": 0.2,
             },
         )
 
     if resp.status_code != 200:
-        raise ValueError(f"Anthropic API error {resp.status_code}: {resp.text}")
+        raise ValueError(f"NVIDIA API error {resp.status_code}: {resp.text}")
 
-    return resp.json()["content"][0]["text"]
+    return resp.json()["choices"][0]["message"]["content"]

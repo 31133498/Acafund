@@ -34,8 +34,8 @@ services:
       - key: MONNIFY_CONTRACT_CODE
         sync: false
 
-      ## ── Anthropic ──
-      - key: ANTHROPIC_API_KEY
+      ## ── NVIDIA Nemotron (AI Assistant) ──
+      - key: NVIDIA_API_KEY
         sync: false
 
       ## ── CORS ──
