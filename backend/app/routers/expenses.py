@@ -27,6 +27,9 @@ class CreateExpenseIn(BaseModel):
     category: str
     collection_id: Optional[int] = None
     receipt_url: Optional[str] = None
+    destination_bank_name: Optional[str] = None
+    destination_account_number: Optional[str] = None
+    destination_account_name: Optional[str] = None
 
 
 class DecisionIn(BaseModel):
@@ -35,6 +38,22 @@ class DecisionIn(BaseModel):
 
 class RejectIn(BaseModel):
     decision_note: str
+
+
+class MarkDisbursedIn(BaseModel):
+    disbursement_reference: Optional[str] = None
+
+
+def _payout_label(expense: Expense) -> str:
+    if expense.status == ExpenseStatus.PENDING:
+        return "Pending Approval"
+    if expense.status == ExpenseStatus.REJECTED:
+        return "Rejected"
+    if expense.status == ExpenseStatus.APPROVED:
+        if expense.disbursed_at:
+            return "Paid Out"
+        return "Approved — Payout Pending"
+    return expense.status.value
 
 
 class ExpenseOut(BaseModel):
@@ -51,7 +70,20 @@ class ExpenseOut(BaseModel):
     decision_note: Optional[str] = None
     created_at: datetime
     decided_at: Optional[datetime] = None
+    destination_bank_name: Optional[str] = None
+    destination_account_number: Optional[str] = None
+    destination_account_name: Optional[str] = None
+    disbursed_at: Optional[datetime] = None
+    disbursed_by: Optional[int] = None
+    disbursement_reference: Optional[str] = None
+    payout_label: str = "Pending Approval"
     model_config = {"from_attributes": True}
+
+    @classmethod
+    def from_orm_with_label(cls, expense: Expense) -> "ExpenseOut":
+        obj = cls.model_validate(expense)
+        obj.payout_label = _payout_label(expense)
+        return obj
 
 
 class LedgerEntryOut(BaseModel):
@@ -91,6 +123,19 @@ def _require_auditor(expense_id: int, current_user, db: Session) -> Expense:
     return expense
 
 
+def _require_admin_or_treasurer(expense: Expense, current_user, db: Session) -> None:
+    mem = (
+        db.query(CommunityMember)
+        .filter(
+            CommunityMember.community_id == expense.community_id,
+            CommunityMember.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not mem or mem.role not in (MemberRole.ADMIN, MemberRole.TREASURER):
+        raise HTTPException(status_code=403, detail="Admin or Treasurer role required")
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post(
@@ -114,11 +159,14 @@ def create_expense(
         receipt_url=body.receipt_url,
         requested_by=current_user.id,
         status=ExpenseStatus.PENDING,
+        destination_bank_name=body.destination_bank_name,
+        destination_account_number=body.destination_account_number,
+        destination_account_name=body.destination_account_name,
     )
     db.add(expense)
     db.commit()
     db.refresh(expense)
-    return expense
+    return ExpenseOut.from_orm_with_label(expense)
 
 
 @router.post("/expenses/{expense_id}/approve", response_model=ExpenseOut)
@@ -144,7 +192,6 @@ def approve_expense(
     expense.decision_note = body.decision_note
     expense.decided_at = datetime.now(timezone.utc)
 
-    # record_debit commits everything (expense mutations + ledger entry) in one shot
     record_debit(
         db=db,
         community_id=expense.community_id,
@@ -154,7 +201,7 @@ def approve_expense(
         description=f"Expense: {expense.title}",
     )
     db.refresh(expense)
-    return expense
+    return ExpenseOut.from_orm_with_label(expense)
 
 
 @router.post("/expenses/{expense_id}/reject", response_model=ExpenseOut)
@@ -178,7 +225,39 @@ def reject_expense(
     expense.decided_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(expense)
-    return expense
+    return ExpenseOut.from_orm_with_label(expense)
+
+
+@router.post("/expenses/{expense_id}/mark-disbursed", response_model=ExpenseOut)
+def mark_disbursed(
+    expense_id: int,
+    body: MarkDisbursedIn,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    expense = db.query(Expense).filter(Expense.id == expense_id).first()
+    if not expense:
+        raise HTTPException(status_code=404, detail="Expense not found")
+
+    _require_admin_or_treasurer(expense, current_user, db)
+
+    if expense.status != ExpenseStatus.APPROVED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Expense must be approved before marking as disbursed",
+        )
+    if expense.disbursed_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Expense already marked as disbursed",
+        )
+
+    expense.disbursed_at = datetime.now(timezone.utc)
+    expense.disbursed_by = current_user.id
+    expense.disbursement_reference = body.disbursement_reference
+    db.commit()
+    db.refresh(expense)
+    return ExpenseOut.from_orm_with_label(expense)
 
 
 @router.get("/communities/{community_id}/expenses", response_model=List[ExpenseOut])
@@ -191,7 +270,8 @@ def list_expenses(
     q = db.query(Expense).filter(Expense.community_id == community_id)
     if expense_status is not None:
         q = q.filter(Expense.status == expense_status)
-    return q.order_by(Expense.created_at.desc()).all()
+    expenses = q.order_by(Expense.created_at.desc()).all()
+    return [ExpenseOut.from_orm_with_label(e) for e in expenses]
 
 
 @router.get("/communities/{community_id}/ledger", response_model=LedgerPageOut)

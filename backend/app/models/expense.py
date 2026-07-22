@@ -24,6 +24,16 @@ class Expense(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     decided_at = Column(DateTime(timezone=True), nullable=True)
 
+    # Destination account (set by Treasurer at creation)
+    destination_bank_name = Column(String, nullable=True)
+    destination_account_number = Column(String, nullable=True)
+    destination_account_name = Column(String, nullable=True)
+
+    # Disbursement tracking (set when Admin/Treasurer marks as paid out)
+    disbursed_at = Column(DateTime(timezone=True), nullable=True)
+    disbursed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    disbursement_reference = Column(String, nullable=True)
+
     community = relationship("Community")
     collection = relationship("Collection")
     requester = relationship("User", foreign_keys=[requested_by])
