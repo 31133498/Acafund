@@ -370,10 +370,11 @@ export async function getReservedAccount(communityId: number): Promise<ReservedA
   }
 }
 
-export async function setupReservedAccount(communityId: number): Promise<ReservedAccount> {
+export async function setupReservedAccount(communityId: number, bvn: string): Promise<ReservedAccount> {
   try {
-    // TODO(endpoint): POST /communities/{id}/reserved-account
-    return await req<ReservedAccount>(`/communities/${communityId}/reserved-account`, { method: 'POST' })
+    return await req<ReservedAccount>(`/communities/${communityId}/reserved-account`, {
+      method: 'POST', body: JSON.stringify({ bvn }),
+    })
   } catch (e) {
     if (!isOffline(e)) throw e
     return OFFLINE_RESERVED_ACCOUNT()

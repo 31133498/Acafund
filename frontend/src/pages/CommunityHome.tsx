@@ -29,6 +29,8 @@ export default function CommunityHome() {
   const [copiedAcct, setCopiedAcct] = useState(false)
   const [settingUp, setSettingUp] = useState(false)
   const [setupError, setSetupError] = useState('')
+  const [bvnInput, setBvnInput] = useState('')
+  const [showBvnForm, setShowBvnForm] = useState(false)
 
   const myRole = members.find((m) => m.user_id === user?.id)?.role
 
@@ -71,11 +73,14 @@ export default function CommunityHome() {
   }
 
   const handleSetupAccount = async () => {
+    if (!bvnInput.trim()) { setSetupError('BVN is required'); return }
     setSettingUp(true)
     setSetupError('')
     try {
-      const ra = await setupReservedAccount(communityId)
+      const ra = await setupReservedAccount(communityId, bvnInput.trim())
       setReservedAccount(ra)
+      setShowBvnForm(false)
+      setBvnInput('')
     } catch (e: unknown) {
       setSetupError(e instanceof Error ? e.message : 'Setup failed')
     } finally {
@@ -180,30 +185,58 @@ export default function CommunityHome() {
             </div>
           </div>
         ) : reservedAccount?.status === 'failed' ? (
-          <div className="border-2 border-error bg-error-container p-4 flex items-center justify-between gap-4">
+          <div className="border-2 border-error bg-error-container p-4 flex flex-col gap-3">
             <div>
               <p className="text-[13px] font-bold text-error">Account setup failed</p>
-              <p className="text-[12px] text-on-surface-variant mt-0.5">
-                {setupError || 'Something went wrong. Try again.'}
-              </p>
+              <p className="text-[12px] text-on-surface-variant mt-0.5">Something went wrong. Try again.</p>
             </div>
             {myRole === 'admin' && (
-              <Button size="sm" variant="white" loading={settingUp} onClick={handleSetupAccount}>
-                Retry Setup
-              </Button>
+              showBvnForm ? (
+                <div className="flex flex-col gap-2">
+                  <input
+                    value={bvnInput}
+                    onChange={(e) => { setBvnInput(e.target.value); setSetupError('') }}
+                    placeholder="Enter your BVN (11 digits)"
+                    maxLength={11}
+                    className="border-2 border-black px-3 py-2 text-[14px] font-bold bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                  {setupError && <p className="text-[12px] text-error font-bold">{setupError}</p>}
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="white" loading={settingUp} onClick={handleSetupAccount}>Retry Setup</Button>
+                    <Button size="sm" variant="white" onClick={() => { setShowBvnForm(false); setSetupError('') }}>Cancel</Button>
+                  </div>
+                </div>
+              ) : (
+                <Button size="sm" variant="white" onClick={() => setShowBvnForm(true)}>Retry Setup</Button>
+              )
             )}
           </div>
         ) : myRole === 'admin' ? (
-          <div className="border-2 border-black bg-surface-container p-4 flex items-center justify-between gap-4">
+          <div className="border-2 border-black bg-surface-container p-4 flex flex-col gap-3">
             <div>
               <p className="text-[14px] font-bold">No direct transfer account</p>
               <p className="text-[12px] text-on-surface-variant mt-0.5">
                 Set one up so members can pay by bank transfer.
               </p>
             </div>
-            <Button size="sm" loading={settingUp} onClick={handleSetupAccount}>
-              Set Up Account
-            </Button>
+            {showBvnForm ? (
+              <div className="flex flex-col gap-2">
+                <input
+                  value={bvnInput}
+                  onChange={(e) => { setBvnInput(e.target.value); setSetupError('') }}
+                  placeholder="Enter your BVN (11 digits)"
+                  maxLength={11}
+                  className="border-2 border-black px-3 py-2 text-[14px] font-bold bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                {setupError && <p className="text-[12px] text-error font-bold">{setupError}</p>}
+                <div className="flex gap-2">
+                  <Button size="sm" loading={settingUp} onClick={handleSetupAccount}>Confirm</Button>
+                  <Button size="sm" variant="white" onClick={() => { setShowBvnForm(false); setSetupError(''); setBvnInput('') }}>Cancel</Button>
+                </div>
+              </div>
+            ) : (
+              <Button size="sm" onClick={() => setShowBvnForm(true)}>Set Up Account</Button>
+            )}
           </div>
         ) : (
           <div className="border-2 border-black bg-surface-container p-4">

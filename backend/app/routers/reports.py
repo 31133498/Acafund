@@ -32,12 +32,15 @@ class ExpensePublicOut(BaseModel):
     amount: float
     category: str
     status: ExpenseStatus
+    payout_reference: Optional[str] = None
+    paid_out_at: Optional[str] = None
 
 
-class DirectTransferInfo(BaseModel):
-    account_number: str
+class ReservedAccountInfo(BaseModel):
     bank_name: Optional[str] = None
+    account_number: str
     account_name: Optional[str] = None
+    status: str = "active"
 
 
 class TransparencyOut(BaseModel):
@@ -50,7 +53,7 @@ class TransparencyOut(BaseModel):
     pending_count: int
     waived_count: int
     budget_allocation: Optional[dict] = None
-    direct_transfer: Optional[DirectTransferInfo] = None
+    reserved_account: Optional[ReservedAccountInfo] = None
     expenses: List[ExpensePublicOut]
 
 
@@ -110,12 +113,13 @@ def get_transparency(
     )
 
     community = db.query(Community).filter(Community.id == col.community_id).first()
-    direct_transfer = None
+    reserved_account = None
     if community and community.reserved_account_number:
-        direct_transfer = DirectTransferInfo(
+        reserved_account = ReservedAccountInfo(
             account_number=community.reserved_account_number,
             bank_name=community.reserved_bank_name,
             account_name=community.reserved_account_name,
+            status=community.reserved_account_status or "active",
         )
 
     return TransparencyOut(
@@ -128,13 +132,15 @@ def get_transparency(
         pending_count=len(pending),
         waived_count=len(waived),
         budget_allocation=col.budget_allocation,
-        direct_transfer=direct_transfer,
+        reserved_account=reserved_account,
         expenses=[
             ExpensePublicOut(
                 title=e.title,
                 amount=e.amount,
                 category=e.category,
                 status=e.status,
+                payout_reference=e.payout_reference,
+                paid_out_at=e.paid_out_at.isoformat() if e.paid_out_at else None,
             )
             for e in expenses
         ],
