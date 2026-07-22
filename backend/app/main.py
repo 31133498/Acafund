@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from app.config import settings
 from app.database import Base, engine
@@ -21,9 +22,61 @@ CORS_HEADERS = {
 }
 
 
+def _migrate(engine):
+    """Rename legacy columns that were deployed under old names."""
+    with engine.begin() as conn:
+        # communities: monnify_* → reserved_*
+        for old, new in [
+            ("monnify_account_reference", "reserved_account_reference"),
+            ("monnify_account_number",    "reserved_account_number"),
+            ("monnify_bank_name",         "reserved_bank_name"),
+            ("monnify_account_name",      "reserved_account_name"),
+        ]:
+            conn.execute(text(f"""
+                DO $$ BEGIN
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name='communities' AND column_name='{old}'
+                    ) THEN
+                        ALTER TABLE communities RENAME COLUMN {old} TO {new};
+                    END IF;
+                END $$;
+            """))
+
+        # communities: add reserved_account_status if missing
+        conn.execute(text("""
+            DO $$ BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name='communities' AND column_name='reserved_account_status'
+                ) THEN
+                    ALTER TABLE communities ADD COLUMN reserved_account_status VARCHAR;
+                END IF;
+            END $$;
+        """))
+
+        # expenses: disbursed_* → paid_out_* / payout_reference
+        for old, new in [
+            ("disbursed_at",           "paid_out_at"),
+            ("disbursed_by",           "paid_out_by"),
+            ("disbursement_reference", "payout_reference"),
+        ]:
+            conn.execute(text(f"""
+                DO $$ BEGIN
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name='expenses' AND column_name='{old}'
+                    ) THEN
+                        ALTER TABLE expenses RENAME COLUMN {old} TO {new};
+                    END IF;
+                END $$;
+            """))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    _migrate(engine)
     yield
 
 
