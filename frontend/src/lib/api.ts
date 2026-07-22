@@ -2,7 +2,7 @@ import type {
   TokenResponse, User, Community, CommunityMember, Collection,
   CollectionDetail, CollectionDashboard, CollectionMemberEntry,
   CommunityDashboard, Expense, LedgerResponse, TransparencyReport,
-  MemberRole, ActiveCollectionSummary,
+  MemberRole, ActiveCollectionSummary, ReservedAccount,
 } from './types'
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
@@ -91,7 +91,14 @@ const OFFLINE_EXPENSE = (overrides: Partial<Expense> = {}): Expense => ({
   id: 1, community_id: 1, title: 'Expense', amount: 0, category: 'Other',
   status: 'pending', receipt_url: null, requested_by: 1, approved_by: null,
   collection_id: null, created_at: new Date().toISOString(), decision_note: null,
-  decided_at: null, ...overrides,
+  decided_at: null, destination_bank_name: null, destination_account_number: null,
+  destination_account_name: null, payout_reference: null, paid_out_at: null,
+  paid_out_by: null, ...overrides,
+})
+
+const OFFLINE_RESERVED_ACCOUNT = (): ReservedAccount => ({
+  bank_name: 'First Bank', account_number: '3012345678',
+  account_name: 'AcaFund Demo Community', status: 'active',
 })
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -322,7 +329,16 @@ export async function getExpenses(communityId: number): Promise<Expense[]> {
 
 export async function createExpense(
   communityId: number,
-  data: { title: string; amount: number; category: string; receipt_url?: string; collection_id?: number },
+  data: {
+    title: string
+    amount: number
+    category: string
+    receipt_url?: string
+    collection_id?: number
+    destination_bank_name: string
+    destination_account_number: string
+    destination_account_name: string
+  },
 ): Promise<Expense> {
   try {
     return await req<Expense>(`/communities/${communityId}/expenses`, {
@@ -335,6 +351,46 @@ export async function createExpense(
       title: data.title, amount: data.amount, category: data.category,
       receipt_url: data.receipt_url ?? null,
       collection_id: data.collection_id ?? null,
+      destination_bank_name: data.destination_bank_name,
+      destination_account_number: data.destination_account_number,
+      destination_account_name: data.destination_account_name,
+    })
+  }
+}
+
+export async function getReservedAccount(communityId: number): Promise<ReservedAccount | null> {
+  try {
+    // TODO(endpoint): GET /communities/{id}/reserved-account
+    return await req<ReservedAccount>(`/communities/${communityId}/reserved-account`)
+  } catch (e) {
+    if (isOffline(e)) return null
+    // 404 means no account set up yet — return null so UI shows setup prompt
+    if (e instanceof Error && e.message.toLowerCase().includes('not found')) return null
+    throw e
+  }
+}
+
+export async function setupReservedAccount(communityId: number): Promise<ReservedAccount> {
+  try {
+    // TODO(endpoint): POST /communities/{id}/reserved-account
+    return await req<ReservedAccount>(`/communities/${communityId}/reserved-account`, { method: 'POST' })
+  } catch (e) {
+    if (!isOffline(e)) throw e
+    return OFFLINE_RESERVED_ACCOUNT()
+  }
+}
+
+export async function markExpensePaidOut(expenseId: number, payout_reference: string): Promise<Expense> {
+  try {
+    // TODO(endpoint): POST /expenses/{id}/mark-paid-out
+    return await req<Expense>(`/expenses/${expenseId}/mark-paid-out`, {
+      method: 'POST', body: JSON.stringify({ payout_reference }),
+    })
+  } catch (e) {
+    if (!isOffline(e)) throw e
+    return OFFLINE_EXPENSE({
+      id: expenseId, status: 'paid_out',
+      payout_reference, paid_out_at: new Date().toISOString(),
     })
   }
 }

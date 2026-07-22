@@ -1,7 +1,7 @@
 export type MemberRole = 'admin' | 'treasurer' | 'auditor' | 'member'
 export type CollectionStatus = 'draft' | 'active' | 'closed'
 export type MemberPaymentStatus = 'pending' | 'paid' | 'waived'
-export type ExpenseStatus = 'pending' | 'approved' | 'rejected'
+export type ExpenseStatus = 'pending' | 'approved' | 'rejected' | 'paid_out'
 export type LedgerEntryType = 'credit' | 'debit'
 
 export interface User {
@@ -15,12 +15,20 @@ export interface TokenResponse {
   token_type: string
 }
 
+export interface ReservedAccount {
+  bank_name: string
+  account_number: string
+  account_name: string
+  status: 'active' | 'pending' | 'failed'
+}
+
 export interface Community {
   id: number
   name: string
   description: string | null
   invite_code: string
   created_by: number
+  reserved_account?: ReservedAccount | null
 }
 
 export interface CommunityMember {
@@ -109,6 +117,12 @@ export interface Expense {
   decision_note: string | null
   created_at: string
   decided_at: string | null
+  destination_bank_name: string | null
+  destination_account_number: string | null
+  destination_account_name: string | null
+  payout_reference: string | null
+  paid_out_at: string | null
+  paid_out_by: number | null
 }
 
 export interface LedgerEntry {
@@ -130,6 +144,8 @@ export interface TransparencyExpense {
   amount: number
   category: string
   status: ExpenseStatus
+  payout_reference: string | null
+  paid_out_at: string | null
 }
 
 export interface TransparencyReport {
@@ -143,6 +159,7 @@ export interface TransparencyReport {
   waived_count: number
   budget_allocation: Record<string, number> | null
   expenses: TransparencyExpense[]
+  reserved_account?: ReservedAccount | null
 }
 
 export interface ApiError {
