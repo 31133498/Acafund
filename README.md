@@ -110,36 +110,6 @@ GET    /collections/{id}/transparency           Public report with payment stats
 POST   /webhooks/monnify                        Webhook receiver for structured payments and direct transfers
 ```
 
-## Deploying to Render
-
-### First deploy
-
-1. Push this repo to GitHub.
-2. In the Render dashboard go to New, then Blueprint, and connect the repo. Render will detect `render.yaml` automatically.
-3. Render will prompt you for every `sync: false` env var. Fill in:
-   - `MONNIFY_API_KEY`
-   - `MONNIFY_SECRET_KEY`
-   - `MONNIFY_CONTRACT_CODE`
-   - `NVIDIA_API_KEY`
-   - `FRONTEND_ORIGIN` (your Vercel URL or custom domain)
-4. Click Apply. Render builds the Docker image and creates all database tables on first startup via SQLAlchemy.
-
-### Monnify webhook
-
-After the service is live, register the webhook URL in the Monnify merchant dashboard:
-
-```
-https://<your-render-url>/webhooks/monnify
-```
-
-This handles both structured student payments and direct bank transfers into community reserved accounts.
-
-### Going live on Monnify production
-
-1. In the Render dashboard update `MONNIFY_BASE_URL` from `https://sandbox.monnify.com` to `https://api.monnify.com`.
-2. Swap `MONNIFY_API_KEY`, `MONNIFY_SECRET_KEY`, and `MONNIFY_CONTRACT_CODE` for your production merchant credentials.
-3. Re-register the webhook URL in the Monnify production merchant dashboard.
-
 ## Test coverage
 
 | Test file | What it covers | Tests |
